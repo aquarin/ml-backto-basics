@@ -151,7 +151,7 @@ class Utilities:
 
         if print_debug:
             logger.debug('u_times_x_one_hot=\n%s\n' % u_times_x_one_hot)
-            logger.debug('new_state_vector=\n%s\n' % new_state_vector)
+            logger.debug('loss_from_matrix_u() new_state_vector=\n%s\n' % new_state_vector)
             logger.debug('logits_vector=\n%s\n' % logits_vector)
             logger.debug('softmax_vector=\n%s\n' % Utilities.softmax(logits_vector))
 
@@ -175,7 +175,7 @@ class Utilities:
         assert input_x_integer >= 0 and input_x_integer < vocab_dim
 
         u_times_x_one_hot = matrix_u_0[:, input_x_integer]
-        before_tanh_vector = prev_s_times_w_result_vector + prev_s_times_w_result_vector
+        before_tanh_vector = prev_s_times_w_result_vector + u_times_x_one_hot
 
         new_state_vector = np.tanh(before_tanh_vector)
         logits_vector = np.matmul(matrix_v, new_state_vector)
@@ -202,7 +202,7 @@ class Utilities:
         if print_debug:
             logger.debug('u_times_x_one_hot=\n%s\n' % u_times_x_one_hot)
             logger.debug('before_tanh_vector=\n%s\n' % before_tanh_vector)
-            logger.debug('new_state_vector=\n%s\n' % new_state_vector)
+            logger.debug('loss_from_matrix_u_derivative_wrt_u() new_state_vector=\n%s\n' % new_state_vector)
             logger.debug('logits_vector=\n%s\n' % logits_vector)
             logger.debug('probs_minus_y_one_shot=\n%s\n' % probs_minus_y_one_shot)
             logger.debug('partial_loss_partial_new_state=\n%s\n' % partial_loss_partial_new_state)

@@ -596,20 +596,20 @@ class TestRNNDerivatives(unittest.TestCase):
         # vocab dim = 4
 
         matrix_u = np.array([
-            [.1, .2, .3, .4],
-            [.11, .8, .33, .44],
-            [.111, 10.222, .333, .444],
+            [0, .2, .3, .4],
+            [0, .8, .33, .44],
+            [1.0, 10.222, .333, .444],
         ])
         matrix_v = np.array([
-            [9, 1, 2],
-            [1, 8, 3],
-            [0., 1.5, 7],
-            [4, 5, 1],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 20],
         ])
-        prev_s_times_w_result_vector = np.array([.8, .2, .1])
+        prev_s_times_w_result_vector = np.array([0, 0, .1])
 
-        input_x_integer = 1
-        label_y_integer = 0
+        input_x_integer = 0
+        label_y_integer = 3
         test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
             lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=True),
             lambda u: Utilities.loss_from_matrix_u_derivative_wrt_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v,
@@ -636,10 +636,20 @@ class TestRNNDerivatives(unittest.TestCase):
             label_y_integer = np.random.randint(4)
 
             test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
-                lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=True),
+                lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=False),
                 lambda u: Utilities.loss_from_matrix_u_derivative_wrt_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v,
-                    label_y_integer, print_debug=True),
-                matrix_u, error_relative_to_delta_x=1, print_diff=True)
+                    label_y_integer, print_debug=False),
+                matrix_u, error_relative_to_delta_x=1, print_diff=False)
+
+            partial_loss_partial_u = Utilities.loss_from_matrix_u_derivative_wrt_u(input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v,
+                    label_y_integer, print_debug=False),
+            numerical_jacobian_diff_matrix = DerivativeVerifier.numerical_jacobian_diff_matrix(
+                lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=False),
+                matrix_x_0=matrix_u,delta_x_scalar=1e-7)
+
+            logger.debug('theoretical partial(loss)/partial(U)=\n%s\n' % partial_loss_partial_u)
+            logger.debug('numerical diff jacobian/delta=\n%s\n' % (numerical_jacobian_diff_matrix / 1e-7))
+
             self.assertTrue(test)
 
 
