@@ -560,8 +560,8 @@ class TestRNNDerivatives(unittest.TestCase):
                 # Derivative w.r.t. S
                 test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
                     lambda s: Utilities.loss_from_matrix_v_and_hidden_state(s, v_0, expected_y),
-                    lambda s: Utilities.loss_from_matrix_v_and_hidden_state_derivative_wrt_v(s, v_0, expected_y),
-                    v_0, error_relative_to_delta_x=1, print_diff=True)
+                    lambda s: Utilities.loss_from_matrix_v_and_hidden_state_derivative_wrt_s(s, v_0, expected_y),
+                    s_0, error_relative_to_delta_x=1, print_diff=True)
                 self.assertTrue(test)
 
 
@@ -586,7 +586,7 @@ class TestRNNDerivatives(unittest.TestCase):
         for input_x_integer in range(4):
             for label_y_integer in range(4):
                 logger.debug('input_x=%d, label_y=%d' % (input_x_integer, label_y_integer))
-                loss = Utilities.loss_from_matrix_U(
+                loss = Utilities.loss_from_matrix_u(
                     input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=True)
                 logger.debug('Loss=%f' % loss)
 

@@ -83,7 +83,7 @@ class Utilities:
 
     @staticmethod
     def loss_from_matrix_v_and_hidden_state(hiddden_state_vector, matrix_v, label_y_as_integer):
-        assert hiddden_state_vector.ndim == 1
+        assert hiddden_state_vector.ndim == 1, logger.debug('hidden_state_vector=%s' % hiddden_state_vector)
         assert matrix_v.ndim == 2
         assert matrix_v.shape[1] == hiddden_state_vector.size
         assert isinstance(label_y_as_integer, int)
@@ -132,7 +132,7 @@ class Utilities:
 
 
     @staticmethod
-    def loss_from_matrix_U(input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v, label_y_as_integer, print_debug=False):
+    def loss_from_matrix_u(input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v, label_y_as_integer, print_debug=False):
         assert isinstance(label_y_as_integer, int)
         assert isinstance(input_x_integer, int)
         assert prev_s_times_w_result_vector.ndim == 1
@@ -155,8 +155,9 @@ class Utilities:
             logger.debug('logits_vector=\n%s\n' % logits_vector)
             logger.debug('softmax_vector=\n%s\n' % Utilities.softmax(logits_vector))
 
-
         return Utilities.loss_from_logits(logits_vector, label_y_as_integer)
+
+
 
 
 
