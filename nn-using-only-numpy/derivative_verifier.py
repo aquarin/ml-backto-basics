@@ -591,6 +591,57 @@ class TestRNNDerivatives(unittest.TestCase):
                 logger.debug('Loss=%f' % loss)
 
 
+    def test_derivative_of_loss_from_u_wrt_u(self):
+        # hidden dim = 3
+        # vocab dim = 4
+
+        matrix_u = np.array([
+            [.1, .2, .3, .4],
+            [.11, .8, .33, .44],
+            [.111, 10.222, .333, .444],
+        ])
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ])
+        prev_s_times_w_result_vector = np.array([.8, .2, .1])
+
+        input_x_integer = 1
+        label_y_integer = 0
+        test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
+            lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=True),
+            lambda u: Utilities.loss_from_matrix_u_derivative_wrt_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v,
+                label_y_integer, print_debug=True),
+            matrix_u, error_relative_to_delta_x=1, print_diff=True)
+
+        numerical_jacobian_diff_matrix = DerivativeVerifier.numerical_jacobian_diff_matrix(
+            lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=False),
+            matrix_x_0=matrix_u,delta_x_scalar=1e-7)
+        logger.debug('numerical diff jacobian=\n%s\n' % numerical_jacobian_diff_matrix)
+        logger.debug('numerical diff jacobian/delta=\n%s\n' % (numerical_jacobian_diff_matrix / 1e-7))
+
+        self.assertTrue(test)
+
+
+    def test_derivative_of_loss_from_u_wrt_u_looped(self):
+
+        logger.info("Testing 200 times with random U, V, input_x, label_y, prev_state_times_w...")
+        for test_count in range(200):
+            matrix_u = np.random.rand(3 * 4).reshape(3, 4)
+            matrix_v = np.random.rand(4 * 3).reshape(4, 3)
+            prev_s_times_w_result_vector = np.random.rand(3)
+            input_x_integer = np.random.randint(4)
+            label_y_integer = np.random.randint(4)
+
+            test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
+                lambda u: Utilities.loss_from_matrix_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=True),
+                lambda u: Utilities.loss_from_matrix_u_derivative_wrt_u(input_x_integer, u, prev_s_times_w_result_vector, matrix_v,
+                    label_y_integer, print_debug=True),
+                matrix_u, error_relative_to_delta_x=1, print_diff=True)
+            self.assertTrue(test)
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)

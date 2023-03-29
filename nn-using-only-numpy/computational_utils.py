@@ -158,7 +158,56 @@ class Utilities:
         return Utilities.loss_from_logits(logits_vector, label_y_as_integer)
 
 
+    @staticmethod
+    def loss_from_matrix_u_derivative_wrt_u(
+        input_x_integer, matrix_u_0, prev_s_times_w_result_vector, matrix_v, label_y_as_integer, print_debug=False):
 
+        assert isinstance(label_y_as_integer, int)
+        assert isinstance(input_x_integer, int)
+        assert prev_s_times_w_result_vector.ndim == 1
 
+        hidden_dim = matrix_u_0.shape[0]
+        vocab_dim = matrix_u_0.shape[1]
+        assert prev_s_times_w_result_vector.size == hidden_dim
+        assert matrix_v.shape[0] == vocab_dim
+        assert matrix_v.shape[1] == hidden_dim
+        assert label_y_as_integer >= 0 and label_y_as_integer < vocab_dim
+        assert input_x_integer >= 0 and input_x_integer < vocab_dim
 
+        u_times_x_one_hot = matrix_u_0[:, input_x_integer]
+        before_tanh_vector = prev_s_times_w_result_vector + prev_s_times_w_result_vector
 
+        new_state_vector = np.tanh(before_tanh_vector)
+        logits_vector = np.matmul(matrix_v, new_state_vector)
+
+        probs_minus_y_one_shot = Utilities.softmax(logits_vector)
+        probs_minus_y_one_shot[label_y_as_integer] -= 1
+
+        # partial(loss) / partial(s[j]), s is new state vector, and iterate j=0...(hidden_dim-1), to make this a vector.
+        # this equals (probs_vector - y_one_hot_vector) times matrix_v. See my notes for more detailed calculations.
+        partial_loss_partial_new_state = np.matmul(probs_minus_y_one_shot, matrix_v)
+
+        # derivative of tanh is sech
+        sech_before_tanh_vector = 1 / np.cosh(before_tanh_vector)
+
+        # partial(loss) / partial(U(j, k)) = 0 when k != x. This is non-zero only for U(j, input_x_integer), a non-zero column.
+        # use np.multiply here for a member-wise multiplication.
+        partial_loss_partial_u_at_x = np.multiply(partial_loss_partial_new_state, sech_before_tanh_vector)
+
+        # assert ((partial_loss_partial_u_at_x.ndim == 1) and (partial_loss_partial_u_at_x.size == hidden_dim)), 'partial_loss_partial_u_at_x has the wrong shape. It=%s' % partial_loss_partial_u_at_x
+
+        partial_loss_partial_u = np.zeros([hidden_dim, vocab_dim])
+        partial_loss_partial_u[:, input_x_integer] = partial_loss_partial_u_at_x
+
+        if print_debug:
+            logger.debug('u_times_x_one_hot=\n%s\n' % u_times_x_one_hot)
+            logger.debug('before_tanh_vector=\n%s\n' % before_tanh_vector)
+            logger.debug('new_state_vector=\n%s\n' % new_state_vector)
+            logger.debug('logits_vector=\n%s\n' % logits_vector)
+            logger.debug('probs_minus_y_one_shot=\n%s\n' % probs_minus_y_one_shot)
+            logger.debug('partial_loss_partial_new_state=\n%s\n' % partial_loss_partial_new_state)
+            logger.debug('sech_before_tanh_vector=\n%s\n' % sech_before_tanh_vector)
+            logger.debug('partial_loss_partial_u_at_x=\n%s\n' % partial_loss_partial_u_at_x)
+            logger.debug('partial_loss_partial_u=\n%s\n' % partial_loss_partial_u)
+
+        return partial_loss_partial_u
