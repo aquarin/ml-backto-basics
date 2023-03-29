@@ -18,14 +18,14 @@ class DerivativeVerifier:
     Tested, x_0, delta_x can both be matrices, and func can be a function of matrix to a scalar
     '''
     @staticmethod
-    def getNumericalDiff(func, x_0, delta_x):
+    def get_numerical_diff(func, x_0, delta_x):
         y_0 = func(x_0)
         y_1 = func(x_0 + delta_x)
         return y_1 - y_0
 
 
     @staticmethod
-    def theoreticalDerivativeEqualsToNumericalDiff(
+    def check_theoretical_derivative_equals_numerical_diff(
         func, theoretical_derivative_of_func, x_0, delta_x_scalar=1e-7, error_relative_to_delta_x=1e-6, print_diff=False):
 
         assert np.isscalar(delta_x_scalar)
@@ -34,14 +34,14 @@ class DerivativeVerifier:
 
         if (np.isscalar(x_0)):
             # Case of returning value as scalar or vector or matrix, all handled.
-            numerical_delta_y = DerivativeVerifier.getNumericalDiff(func, x_0, delta_x_scalar)
+            numerical_delta_y = DerivativeVerifier.get_numerical_diff(func, x_0, delta_x_scalar)
             theoretical_delta_y = np.dot(theoretical_derivative_of_func(x_0), delta_x_scalar)
 
             comparison_logical_results = abs(numerical_delta_y - theoretical_delta_y) < abs(delta_x_scalar * error_relative_to_delta_x)
 
             # TODO: what if this is a scalar to vector/matrix function?
         else:
-            numerical_diff_jacobian = DerivativeVerifier.numericalJacobianDiffMatrix(func, x_0, delta_x_scalar)
+            numerical_diff_jacobian = DerivativeVerifier.numerical_jacobian_diff_matrix(func, x_0, delta_x_scalar)
 
             theoretical_diff_jacobian = theoretical_derivative_of_func(x_0)
             # Handle a matrix of objects
@@ -70,7 +70,7 @@ class DerivativeVerifier:
 
 
     @staticmethod
-    def numericalJacobianDiffMatrix(func, matrix_x_0, delta_x_scalar):
+    def numerical_jacobian_diff_matrix(func, matrix_x_0, delta_x_scalar):
         assert np.isscalar(delta_x_scalar)
 
         diff_jacobian = np.zeros_like(matrix_x_0, dtype=object)
@@ -197,25 +197,25 @@ class DerivativeVerifierTests(unittest.TestCase):
         return result
 
 
-    def testSimpleFunc(self):
+    def test_simple_func(self):
         def _func(x):
             return 2 * x
 
-        delta_y = self.verifier.getNumericalDiff(_func, 0, .1)
+        delta_y = self.verifier.get_numerical_diff(_func, 0, .1)
         np.testing.assert_equal(delta_y, 0.2)
 
         np.testing.assert_almost_equal(
-            self.verifier.getNumericalDiff(lambda x: x * x, 10, .1),
+            self.verifier.get_numerical_diff(lambda x: x * x, 10, .1),
             2.01, 10)
 
         # Derivative of cosine at pi is 0. 0 times 1-e12 should still be zero.
         # Verify to the precision of the 20th decimals (1e-20).
         np.testing.assert_almost_equal(
-            self.verifier.getNumericalDiff(math.cos, math.pi, 1e-12),
+            self.verifier.get_numerical_diff(math.cos, math.pi, 1e-12),
             0.0, 20)
 
 
-    def testMatrixToScalarFunc(self):
+    def test_matrix_to_scalar_func(self):
         # m(i, j) -> cox(m(i, j) + n), n = i * size + j
         # Then sum all up to a scalar.
         def _scalar_func_of_matrix1(matrix):
@@ -233,24 +233,24 @@ class DerivativeVerifierTests(unittest.TestCase):
         # derivative to matrix's [0][0] is d(cos(x + 0))/dx @ 0, = 0
         delta_x = np.zeros_like(x_0)
         delta_x[0][0] = 1e-10
-        delta_y = self.verifier.getNumericalDiff(_scalar_func_of_matrix1, x_0, delta_x)
+        delta_y = self.verifier.get_numerical_diff(_scalar_func_of_matrix1, x_0, delta_x)
         np.testing.assert_almost_equal(delta_y, 0, 20)
 
 
         # derivative to matrix's [0][1] is d(cos(x + 3))/dx @pi, = -sin(3 + pi)
         delta_x = np.zeros_like(x_0)
         delta_x[1][0] = 1e-10
-        delta_y = self.verifier.getNumericalDiff(_scalar_func_of_matrix1, x_0, delta_x)
+        delta_y = self.verifier.get_numerical_diff(_scalar_func_of_matrix1, x_0, delta_x)
         np.testing.assert_almost_equal(delta_y, - math.sin(3 + math.pi) * 1e-10, 15)
 
         # derivative to matrix's [3][2] is d(cos(x + 11))/dx @7, = - sin(18)
         delta_x = np.zeros_like(x_0)
         delta_x[3][2] = 1e-10
-        delta_y = self.verifier.getNumericalDiff(_scalar_func_of_matrix1, x_0, delta_x)
+        delta_y = self.verifier.get_numerical_diff(_scalar_func_of_matrix1, x_0, delta_x)
         np.testing.assert_almost_equal(delta_y, - math.sin(18) * 1e-10, 15)
 
 
-    def testMatrixToMatrixFunc(self):
+    def test_matrix_to_matrix_func(self):
         def _matrix_to_matrix_func1(matrix):
             addition_matrix = np.arange(matrix.size).reshape(matrix.shape)
             cosine_matrix = np.cos(matrix + addition_matrix)
@@ -270,7 +270,7 @@ class DerivativeVerifierTests(unittest.TestCase):
 
         delta_x = np.zeros_like(x_0)
         delta_x[0][0] = 1e-10
-        delta_y = self.verifier.getNumericalDiff(_matrix_to_matrix_func1, x_0, delta_x)
+        delta_y = self.verifier.get_numerical_diff(_matrix_to_matrix_func1, x_0, delta_x)
         np.testing.assert_almost_equal(
             delta_y,
             np.array([0 , 0, 0, 0]),
@@ -278,15 +278,15 @@ class DerivativeVerifierTests(unittest.TestCase):
 
         delta_x = np.zeros_like(x_0)
         delta_x[1][1] = 1e-10
-        delta_y = self.verifier.getNumericalDiff(_matrix_to_matrix_func1, x_0, delta_x)
+        delta_y = self.verifier.get_numerical_diff(_matrix_to_matrix_func1, x_0, delta_x)
         np.testing.assert_almost_equal(
             delta_y,
             np.array([0 , math.cos(1 + 4 + 1e-10) - math.cos(1 + 4), 0, 0]),
             15)
 
 
-    def testTheoreticalVsNumericalDelta(self):
-        self.assertTrue(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+    def test_theoretical_vs_numerical_delta(self):
+        self.assertTrue(self.verifier.check_theoretical_derivative_equals_numerical_diff(
             lambda x: math.cos(x),
             lambda x: -math.sin(x),
             0))
@@ -294,39 +294,39 @@ class DerivativeVerifierTests(unittest.TestCase):
 
         random_numbers = np.random.rand(100) * 4 * math.pi
         for x_0 in random_numbers:
-            self.assertTrue(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+            self.assertTrue(self.verifier.check_theoretical_derivative_equals_numerical_diff(
                 lambda x: math.cos(x),
                 lambda x: -math.sin(x),
                 x_0))
 
             # Verify the wrong theoretical derivative is wrong
-            self.assertFalse(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+            self.assertFalse(self.verifier.check_theoretical_derivative_equals_numerical_diff(
                 lambda x: math.cos(x),
                 lambda x: math.cos(x),
                 x_0))
 
-    def testTheoreticalVsNumericalDeltaScalarToMatrix(self):
+    def test_theoretical_vs_numerical_delta_scalar_to_matrix(self):
         # Scalar to vector function.
-        self.assertTrue(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+        self.assertTrue(self.verifier.check_theoretical_derivative_equals_numerical_diff(
             lambda x: np.array([math.cos(x), math.sin(x)]),
             lambda x: np.array([-math.sin(x), math.cos(x)]),
             0))
 
         random_numbers = np.random.rand(100) * 4 * math.pi
         for x_0 in random_numbers:
-            self.assertTrue(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+            self.assertTrue(self.verifier.check_theoretical_derivative_equals_numerical_diff(
                 lambda x: math.cos(x),
                 lambda x: -math.sin(x),
                 x_0))
 
-    def testNumericalJacobianDiffMatrix(self):
+    def testnumerical_jacobian_diff_matrix(self):
         x_0_matrix = np.array([
             [1, 2, 3],
             [11, 12, 13],
         ])
 
         delta = 1e-4
-        numerical_diff_jacobian = self.verifier.numericalJacobianDiffMatrix(
+        numerical_diff_jacobian = self.verifier.numerical_jacobian_diff_matrix(
             self._matrix_to_matrix_func1, x_0_matrix, delta)
 
         # _matrix_to_matrix_func1: result[0][0] = math.sin(matrix[0][0]) * matrix[0][1]
@@ -397,14 +397,14 @@ class DerivativeVerifierTests(unittest.TestCase):
 
         delta = 1e-6
 
-        result = self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+        result = self.verifier.check_theoretical_derivative_equals_numerical_diff(
             # Used error_relative_to_delta_x=1, as I verified for f(x) = exp(x) * 12 at x=11,
             # the diff(numerical_diff, theoretical_d_times_delta) is 0.3 times delta_x, when delta_x = 1e-6
             self._matrix_to_matrix_func1, self._theoretical_d_func1, x_0_matrix, delta, error_relative_to_delta_x=1,
             print_diff=True)
         self.assertTrue(result)
         self.assertFalse(
-            self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+            self.verifier.check_theoretical_derivative_equals_numerical_diff(
             self._matrix_to_matrix_func1, self._false_d_fun1, x_0_matrix, delta, error_relative_to_delta_x=1,
             print_diff=True))
 
@@ -412,19 +412,19 @@ class DerivativeVerifierTests(unittest.TestCase):
             [100, 200, 300],
             [11, math.pi, 130],
         ])
-        result = self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+        result = self.verifier.check_theoretical_derivative_equals_numerical_diff(
             # Used error_relative_to_delta_x=1, as I verified for f(x) = exp(x) * 12 at x=11,
             # the diff(numerical_diff, theoretical_d_times_delta) is 0.3 times delta_x, when delta_x = 1e-6
             self._matrix_to_matrix_func1, self._theoretical_d_func1, x_0_matrix, delta, error_relative_to_delta_x=1,
             print_diff=True)
         self.assertTrue(result)
         self.assertFalse(
-            self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+            self.verifier.check_theoretical_derivative_equals_numerical_diff(
             self._matrix_to_matrix_func1, self._false_d_fun1, x_0_matrix, delta, error_relative_to_delta_x=1,
             print_diff=True))
 
 
-    def testMatrixEnumerator(self):
+    def test_matrix_enumerator(self):
         a = np.array([
             [1, 2, 3],
             [4, 5, 6],
@@ -437,14 +437,14 @@ class DerivativeVerifierTests(unittest.TestCase):
             logger.debug('b=%s' % b)
 
 
-    def __testTheoreticalVsNumericalDeltaForMatrix(self):
-        self.assertTrue(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+    def __test_theoretical_vs_numerical_delta_for_matrix(self):
+        self.assertTrue(self.verifier.check_theoretical_derivative_equals_numerical_diff(
             lambda x: np.cos(x),
             lambda x: -np.sin(x),
             0))
 
         random_numbers_x0 = np.random.rand(100) * 4 * math.pi
-        self.assertTrue(self.verifier.theoreticalDerivativeEqualsToNumericalDiff(
+        self.assertTrue(self.verifier.check_theoretical_derivative_equals_numerical_diff(
             lambda x: np.cos(x),
             lambda x: -np.sin(x),
             random_numbers_x0))
@@ -462,17 +462,17 @@ Plans:
      7) Theoretical derivative of matrix W
 '''
 class TestRNNDerivatives(unittest.TestCase):
-    def testSoftmax(self):
+    def test_softmax(self):
         logger.debug(Utilities.softmax(np.array([1, 2, 3, 4, 5])))
         logger.debug(Utilities.softmax_derivative(np.array([1, 2, 3, 4, 5])))
 
-        test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
+        test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
             Utilities.softmax, Utilities.softmax_derivative,
             np.array([1, 2, 3, 4, 5]),
             print_diff=True)
         self.assertTrue(test)
 
-        test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
+        test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
             Utilities.softmax, Utilities.softmax_derivative,
             np.array([110]), print_diff=True)
         self.assertTrue(test)
@@ -485,13 +485,13 @@ class TestRNNDerivatives(unittest.TestCase):
         logger.info("Looping %d times to test derivative of softmax of a size %d vector..." % (100, test_vector_size))
         for test_count in range(100):
             logits_x_0 = np.random.rand(test_vector_size)
-            test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
+            test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
                 Utilities.softmax, Utilities.softmax_derivative,
                 logits_x_0, print_diff=False)
             self.assertTrue(test)
 
 
-    def testLossFromLogits(self):
+    def test_loss_from_logits(self):
         logger.debug("Some visual inspection of loss function from logits:")
         logger.debug(Utilities.loss_from_logits(np.array([1, 2, 3, 4, 5]), 0))
         logger.debug(Utilities.loss_from_logits(np.array([1, 2, 3, 4, 5]), 1))
@@ -507,9 +507,9 @@ class TestRNNDerivatives(unittest.TestCase):
         logger.debug(Utilities.loss_from_logits_derivative_wrt_logits(np.array([1, 2, 3, 4, 5]), 4))
 
 
-    def testLossFromLogitsDerivatives(self):
+    def test_loss_from_logits_derivatives(self):
         for expected_y in range(5):
-            test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
+            test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
                 lambda logits_0: Utilities.loss_from_logits(logits_0, expected_y),
                 lambda logits_0: Utilities.loss_from_logits_derivative_wrt_logits(logits_0, expected_y),
                 np.array([1, 2, 3, 4, 5]), print_diff=False)
@@ -521,14 +521,14 @@ class TestRNNDerivatives(unittest.TestCase):
         for test_count in range(loop_times):
             logits_x_0 = np.random.rand(test_vector_size)
             for expected_y in range(test_vector_size):
-                test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
+                test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
                     lambda logits_0: Utilities.loss_from_logits(logits_x_0, expected_y),
                     lambda logits_0: Utilities.loss_from_logits_derivative_wrt_logits(logits_x_0, expected_y),
                     logits_x_0, error_relative_to_delta_x=1, print_diff=True)
                 self.assertTrue(test)
 
 
-    def testLossFromVandS(self):
+    def test_loss_from_v_and_s(self):
         s_0 = np.array([1, 2, 3, 4])
         v_0 = np.array([
             [0.11, .12, .13, .14],
@@ -551,22 +551,22 @@ class TestRNNDerivatives(unittest.TestCase):
             s_0 = np.random.rand(4)
             for expected_y in range(5):
                 # Derivative w.r.t. V
-                test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
+                test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
                     lambda v: Utilities.loss_from_matrix_v_and_hidden_state(s_0, v, expected_y),
                     lambda v: Utilities.loss_from_matrix_v_and_hidden_state_derivative_wrt_v(s_0, v, expected_y),
                     v_0, error_relative_to_delta_x=1, print_diff=True)
                 self.assertTrue(test)
 
                 # Derivative w.r.t. S
-                test = DerivativeVerifier.theoreticalDerivativeEqualsToNumericalDiff(
-                    lambda s: Utilities.loss_from_matrix_v_and_hidden_state(s, v0, expected_y),
+                test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
+                    lambda s: Utilities.loss_from_matrix_v_and_hidden_state(s, v_0, expected_y),
                     lambda s: Utilities.loss_from_matrix_v_and_hidden_state_derivative_wrt_v(s, v_0, expected_y),
                     v_0, error_relative_to_delta_x=1, print_diff=True)
                 self.assertTrue(test)
 
 
     # Just a visual verificaiton.
-    def testLossFromUAndX(self):
+    def test_loss_from_u_and_x(self):
         # hidden dim = 3
         # vocab dim = 4
 
