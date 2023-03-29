@@ -565,6 +565,33 @@ class TestRNNDerivatives(unittest.TestCase):
                 self.assertTrue(test)
 
 
+    # Just a visual verificaiton.
+    def testLossFromUAndX(self):
+        # hidden dim = 3
+        # vocab dim = 4
+
+        matrix_u = np.array([
+            [.1, .2, .3, .4],
+            [.11, .22, .33, .44],
+            [.111, .222, .333, .444],
+        ])
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ])
+        prev_s_times_w_result_vector = np.array([.8, .2, .1])
+
+        for input_x_integer in range(4):
+            for label_y_integer in range(4):
+                logger.debug('input_x=%d, label_y=%d' % (input_x_integer, label_y_integer))
+                loss = Utilities.loss_from_matrix_U(
+                    input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v, label_y_integer, print_debug=True)
+                logger.debug('Loss=%f' % loss)
+
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

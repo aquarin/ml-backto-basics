@@ -1,5 +1,3 @@
-# RNN Using only NP, from https://github.com/gy910210/rnn-from-scratch
-
 import math
 import numpy as np
 import logging
@@ -134,7 +132,7 @@ class Utilities:
 
 
     @staticmethod
-    def loss_from_matrix_U(input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v, label_y_as_integer):
+    def loss_from_matrix_U(input_x_integer, matrix_u, prev_s_times_w_result_vector, matrix_v, label_y_as_integer, print_debug=False):
         assert isinstance(label_y_as_integer, int)
         assert isinstance(input_x_integer, int)
         assert prev_s_times_w_result_vector.ndim == 1
@@ -144,3 +142,22 @@ class Utilities:
         assert prev_s_times_w_result_vector.size == hidden_dim
         assert matrix_v.shape[0] == vocab_dim
         assert matrix_v.shape[1] == hidden_dim
+        assert label_y_as_integer >= 0 and label_y_as_integer < vocab_dim
+        assert input_x_integer >= 0 and input_x_integer < vocab_dim
+
+        u_times_x_one_hot = matrix_u[:, input_x_integer]
+        new_state_vector = np.tanh(prev_s_times_w_result_vector + u_times_x_one_hot)
+        logits_vector = np.matmul(matrix_v, new_state_vector)
+
+        if print_debug:
+            logger.debug('u_times_x_one_hot=\n%s\n' % u_times_x_one_hot)
+            logger.debug('new_state_vector=\n%s\n' % new_state_vector)
+            logger.debug('logits_vector=\n%s\n' % logits_vector)
+            logger.debug('softmax_vector=\n%s\n' % Utilities.softmax(logits_vector))
+
+
+        return Utilities.loss_from_logits(logits_vector, label_y_as_integer)
+
+
+
+
