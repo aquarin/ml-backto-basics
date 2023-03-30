@@ -160,22 +160,22 @@ class Utilities:
 
     @staticmethod
     def loss_from_matrix_u_derivative_wrt_u(
-        input_x_integer, matrix_u_0, prev_s_times_w_result_vector, matrix_v, label_y_as_integer, print_debug=False):
+        input_x_integer, matrix_u_0, w_times_prev_state, matrix_v, label_y_as_integer, print_debug=False):
 
         assert isinstance(label_y_as_integer, int)
         assert isinstance(input_x_integer, int)
-        assert prev_s_times_w_result_vector.ndim == 1
+        assert w_times_prev_state.ndim == 1
 
         hidden_dim = matrix_u_0.shape[0]
         vocab_dim = matrix_u_0.shape[1]
-        assert prev_s_times_w_result_vector.size == hidden_dim
+        assert w_times_prev_state.size == hidden_dim
         assert matrix_v.shape[0] == vocab_dim
         assert matrix_v.shape[1] == hidden_dim
         assert label_y_as_integer >= 0 and label_y_as_integer < vocab_dim
         assert input_x_integer >= 0 and input_x_integer < vocab_dim
 
         u_times_x_one_hot = matrix_u_0[:, input_x_integer]
-        before_tanh_vector = prev_s_times_w_result_vector + u_times_x_one_hot
+        before_tanh_vector = w_times_prev_state + u_times_x_one_hot
 
         new_state_vector = np.tanh(before_tanh_vector)
         logits_vector = np.matmul(matrix_v, new_state_vector)
@@ -211,3 +211,89 @@ class Utilities:
             logger.debug('partial_loss_partial_u=\n%s\n' % partial_loss_partial_u)
 
         return partial_loss_partial_u
+
+
+    # Quite a duplicate from method loss_from_matrix_u(). Well, just for verifications.
+    @staticmethod
+    def loss_from_matrix_w_prev_state(matrix_w, prev_state_vector, matrix_u_times_input_x, matrix_v, label_y_as_integer, print_debug=False):
+        assert isinstance(label_y_as_integer, int)
+        assert prev_state_vector.ndim == 1
+        assert matrix_v.ndim == 2
+        assert matrix_u_times_input_x.ndim == 1
+        assert matrix_w.ndim == 2
+
+        hidden_dim = prev_state_vector.size
+        vocab_dim = matrix_v.shape[0]
+        assert matrix_v.shape[1] == hidden_dim
+        assert matrix_w.shape[0] == matrix_w.shape[1] == hidden_dim
+        assert label_y_as_integer >= 0 and label_y_as_integer < vocab_dim
+
+        w_times_prev_state = np.matmul(matrix_w, prev_state_vector)
+        new_state_vector = np.tanh(w_times_prev_state + matrix_u_times_input_x)
+        logits_vector = np.matmul(matrix_v, new_state_vector)
+
+        if print_debug:
+            logger.debug('matrix_u_times_input_x=\n%s\n' % matrix_u_times_input_x)
+            logger.debug('matrix_w_prev_state() w_times_prev_state=\n%s\n' % w_times_prev_state)
+            logger.debug('matrix_w_prev_state() new_state_vector=\n%s\n' % new_state_vector)
+            logger.debug('logits_vector=\n%s\n' % logits_vector)
+            logger.debug('softmax_vector=\n%s\n' % Utilities.softmax(logits_vector))
+
+        return Utilities.loss_from_logits(logits_vector, label_y_as_integer)
+
+
+    # Calculation of this derivative is in my notes. Quite similar to loss_from_matrix_u_derivative_wrt_u().
+    @staticmethod
+    def loss_from_matrix_u_derivative_wrt_u(matrix_w_0, prev_state_vector, matrix_u_times_input_x, matrix_v, label_y_as_integer, print_debug=False):
+        assert isinstance(label_y_as_integer, int)
+        assert prev_state_vector.ndim == 1
+        assert matrix_v.ndim == 2
+        assert matrix_u_times_input_x.ndim == 1
+        assert matrix_w_0.ndim == 2
+
+        hidden_dim = prev_state_vector.size
+        vocab_dim = matrix_v.shape[0]
+        assert matrix_v.shape[1] == hidden_dim
+        assert matrix_w_0.shape[0] == matrix_w_0.shape[1] == hidden_dim
+        assert label_y_as_integer >= 0 and label_y_as_integer < vocab_dim
+
+        w_times_prev_state = np.matmul(matrix_w, prev_state_vector)
+        before_tanh_vector = w_times_prev_state + matrix_u_times_input_x
+
+        new_state_vector = np.tanh(before_tanh_vector)
+        logits_vector = np.matmul(matrix_v, new_state_vector)
+
+        probs_minus_y_one_shot = Utilities.softmax(logits_vector)
+        probs_minus_y_one_shot[label_y_as_integer] -= 1
+
+        # partial(loss) / partial(s[j]), s is new state vector, and iterate j=0...(hidden_dim-1), to make this a vector.
+        # this equals (probs_vector - y_one_hot_vector) times matrix_v. See my notes for more detailed calculations.
+        partial_loss_partial_new_state = np.matmul(probs_minus_y_one_shot, matrix_v)
+
+        # derivative of tanh is sech
+        sech_before_tanh_vector = 1 / np.cosh(before_tanh_vector)
+
+        # According to my hand calculations,
+        # partial(loss)/partial(W[j, k])
+        # =  sum_m( (Pm - Ym) * V[m, j]) / cosh(before_tanh_vector[j]) * prev_state_vector[k]
+        # Pm is probability[m] obtained by softmax(logit[m])
+        # Ym is one element from one-hot representation of label_y_vector, with 1 only at label_y_as_integer
+        partial_loss_partial_before_tanh_vector = np.matmul(partial_loss_partial_new_state, sech_before_tanh_vector)
+        partial_loss_partial_w = np.outer(partial_loss_partial_before_tanh_vector, prev_state_vector)
+
+        if print_debug:
+            logger.debug('matrix_u_times_input_x=\n%s\n' % matrix_u_times_input_x)
+            logger.debug('before_tanh_vector=\n%s\n' % before_tanh_vector)
+            logger.debug('loss_from_matrix_u_derivative_wrt_u() new_state_vector=\n%s\n' % new_state_vector)
+            logger.debug('logits_vector=\n%s\n' % logits_vector)
+            logger.debug('probs_minus_y_one_shot=\n%s\n' % probs_minus_y_one_shot)
+            logger.debug('partial_loss_partial_new_state=\n%s\n' % partial_loss_partial_new_state)
+            logger.debug('sech_before_tanh_vector=\n%s\n' % sech_before_tanh_vector)
+            logger.debug('partial_loss_partial_before_tanh_vector=\n%s\n' % partial_loss_partial_before_tanh_vector)
+            logger.debug('partial_loss_partial_w=\n%s\n' % partial_loss_partial_w)
+
+        assert partial_loss_partial_w.ndim == 2
+        assert partial_loss_partial_w.shape[0] == partial_loss_partial_w.shape[1] == hidden_dim
+
+        return partial_loss_partial_w
+

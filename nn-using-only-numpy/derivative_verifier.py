@@ -652,6 +652,37 @@ class TestRNNDerivatives(unittest.TestCase):
 
             self.assertTrue(test)
 
+    # Just visual verifications.
+    def test_loss_from_w_and_prev_state(self):
+        # hidden dim = 3
+        # vocab dim = 4
+
+        matrix_u = np.array([
+            [5.0, 1.0, 1.0, 1.0],
+            [-1.0, 6.0, 1.0, 3.0],
+            [-1.0, 1.0, 7.0, 3.0],
+        ])
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ])
+        matrix_w = np.array([
+            [-.5, .5, .8],
+            [2.0, -1.0, 1.0],
+            [3.0, 5.0, -2.0],
+        ])
+        prev_state_vector = np.array([5.0, 1.0, 2.0])
+
+        for input_x_integer in range(4):
+            for label_y_integer in range(4):
+                logger.debug('input_x=%d, label_y=%d' % (input_x_integer, label_y_integer))
+                u_times_onehot_x = matrix_u[:, input_x_integer]
+                loss = Utilities.loss_from_matrix_w_prev_state(
+                    matrix_w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=True)
+                logger.debug('Loss=%f' % loss)
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
