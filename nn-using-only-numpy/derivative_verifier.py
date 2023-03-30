@@ -760,6 +760,38 @@ class TestRNNDerivatives(unittest.TestCase):
                 self.assertTrue(test)
 
 
+    def test_derivative_of_loss_from_w_wrt_w_looped(self):
+        # hidden dim = 3
+        # vocab dim = 4
+
+        for test_count in range(20):
+            matrix_u = np.random.uniform(-1, 1, 3 * 4).reshape(3, 4)
+            matrix_v = np.random.uniform(-1, 1, 4 * 3).reshape(4, 3)
+            matrix_w = np.random.uniform(-1, 1, 3 * 3).reshape(3, 3)
+            prev_state_vector = np.random.uniform(-1, 1, 3)
+
+            for input_x_integer in range(4):
+                for label_y_integer in range(4):
+                    logger.debug('input_x=%d, label_y=%d' % (input_x_integer, label_y_integer))
+                    u_times_onehot_x = matrix_u[:, input_x_integer]
+
+                    test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
+                        lambda w: Utilities.loss_from_matrix_w_prev_state(w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=False),
+                        lambda w: Utilities.loss_from_matrix_w_derivative_wrt_w(
+                            w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=False),
+                        matrix_w, error_relative_to_delta_x=1, print_diff=False)
+
+                    theoretical_jacobian = Utilities.loss_from_matrix_w_derivative_wrt_w(
+                            matrix_w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=False)
+                    numerical_jacobian_diff_matrix = DerivativeVerifier.numerical_jacobian_diff_matrix(
+                        lambda w: Utilities.loss_from_matrix_w_prev_state(w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=False),
+                        matrix_x_0=matrix_w,delta_x_scalar=1e-6)
+                    logger.debug('theoretical jacobian=\n%s\n' % theoretical_jacobian)
+                    logger.debug('numerical diff jacobian/delta=\n%s\n' % (numerical_jacobian_diff_matrix / 1e-6))
+
+                    self.assertTrue(test)
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
