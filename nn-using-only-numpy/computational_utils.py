@@ -244,7 +244,7 @@ class Utilities:
 
     # Calculation of this derivative is in my notes. Quite similar to loss_from_matrix_u_derivative_wrt_u().
     @staticmethod
-    def loss_from_matrix_u_derivative_wrt_u(matrix_w_0, prev_state_vector, matrix_u_times_input_x, matrix_v, label_y_as_integer, print_debug=False):
+    def loss_from_matrix_w_derivative_wrt_w(matrix_w_0, prev_state_vector, matrix_u_times_input_x, matrix_v, label_y_as_integer, print_debug=False):
         assert isinstance(label_y_as_integer, int)
         assert prev_state_vector.ndim == 1
         assert matrix_v.ndim == 2
@@ -257,7 +257,7 @@ class Utilities:
         assert matrix_w_0.shape[0] == matrix_w_0.shape[1] == hidden_dim
         assert label_y_as_integer >= 0 and label_y_as_integer < vocab_dim
 
-        w_times_prev_state = np.matmul(matrix_w, prev_state_vector)
+        w_times_prev_state = np.matmul(matrix_w_0, prev_state_vector)
         before_tanh_vector = w_times_prev_state + matrix_u_times_input_x
 
         new_state_vector = np.tanh(before_tanh_vector)
@@ -278,7 +278,7 @@ class Utilities:
         # =  sum_m( (Pm - Ym) * V[m, j]) / cosh(before_tanh_vector[j]) * prev_state_vector[k]
         # Pm is probability[m] obtained by softmax(logit[m])
         # Ym is one element from one-hot representation of label_y_vector, with 1 only at label_y_as_integer
-        partial_loss_partial_before_tanh_vector = np.matmul(partial_loss_partial_new_state, sech_before_tanh_vector)
+        partial_loss_partial_before_tanh_vector = np.multiply(partial_loss_partial_new_state, sech_before_tanh_vector)
         partial_loss_partial_w = np.outer(partial_loss_partial_before_tanh_vector, prev_state_vector)
 
         if print_debug:
@@ -293,7 +293,7 @@ class Utilities:
             logger.debug('partial_loss_partial_w=\n%s\n' % partial_loss_partial_w)
 
         assert partial_loss_partial_w.ndim == 2
-        assert partial_loss_partial_w.shape[0] == partial_loss_partial_w.shape[1] == hidden_dim
+        assert partial_loss_partial_w.shape[0] == partial_loss_partial_w.shape[1] == hidden_dim, 'partial_loss_partial_w=' + str(partial_loss_partial_w)
 
         return partial_loss_partial_w
 

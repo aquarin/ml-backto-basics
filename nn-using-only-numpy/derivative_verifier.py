@@ -529,7 +529,7 @@ class TestRNNDerivatives(unittest.TestCase):
 
 
     def test_loss_from_v_and_s(self):
-        s_0 = np.array([1, 2, 3, 4])
+        s_0 = np.array([1.0, 2, 3, 4]) / 10
         v_0 = np.array([
             [0.11, .12, .13, .14],
             [0.21, .22, .23, .24],
@@ -580,7 +580,7 @@ class TestRNNDerivatives(unittest.TestCase):
             [1, 8, 3],
             [0., 1.5, 7],
             [4, 5, 1],
-        ])
+        ]) / 10
         prev_s_times_w_result_vector = np.array([.8, .2, .1])
 
         for input_x_integer in range(4):
@@ -605,7 +605,7 @@ class TestRNNDerivatives(unittest.TestCase):
             [0, 0, 0],
             [0, 0, 0],
             [0, 0, 20],
-        ])
+        ]) / 20
         prev_s_times_w_result_vector = np.array([0, 0, .1])
 
         input_x_integer = 0
@@ -661,19 +661,19 @@ class TestRNNDerivatives(unittest.TestCase):
             [5.0, 1.0, 1.0, 1.0],
             [-1.0, 6.0, 1.0, 3.0],
             [-1.0, 1.0, 7.0, 3.0],
-        ])
+        ]) / 10 
         matrix_v = np.array([
             [9, 1, 2],
             [1, 8, 3],
             [0., 1.5, 7],
             [4, 5, 1],
-        ])
+        ]) / 10
         matrix_w = np.array([
             [-.5, .5, .8],
             [2.0, -1.0, 1.0],
             [3.0, 5.0, -2.0],
-        ])
-        prev_state_vector = np.array([5.0, 1.0, 2.0])
+        ]) / 10
+        prev_state_vector = np.array([.5, .1, -.8])
 
         for input_x_integer in range(4):
             for label_y_integer in range(4):
@@ -682,6 +682,82 @@ class TestRNNDerivatives(unittest.TestCase):
                 loss = Utilities.loss_from_matrix_w_prev_state(
                     matrix_w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=True)
                 logger.debug('Loss=%f' % loss)
+
+    # random inspection case
+    def test_loss_from_w_and_prev_state_1(self):
+        # hidden dim = 3
+        # vocab dim = 4
+
+        matrix_u = np.array([
+            [5.0, 1.0, 1.0, 1.0],
+            [-1.0, 6.0, 1.0, 3.0],
+            [-1.0, 1.0, 7.0, 3.0],
+        ]) / 10
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ]) / 10
+        matrix_w = np.array([
+            [-.5, .5, .8],
+            [2.0, -1.0, 1.0],
+            [3.0, 5.0, -2.0],
+        ]) / 10
+        prev_state_vector = np.array([.5, .1, -.8])
+
+        input_x_integer = 0
+        label_y_integer = 0
+        u_times_onehot_x = matrix_u[:, input_x_integer]
+
+        loss1 = Utilities.loss_from_matrix_w_prev_state(
+                    matrix_w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=True)
+        logger.debug('loss1=%f' % loss1)
+
+        matrix_w[2][2] = 3.1
+        loss2 = Utilities.loss_from_matrix_w_prev_state(
+                    matrix_w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=True)
+        logger.debug('loss2=%f' % loss2)
+
+    def test_derivative_of_loss_from_w_wrt_w(self):
+        # hidden dim = 3
+        # vocab dim = 4
+
+        matrix_u = np.array([
+            [5.0, 1.0, 1.0, 1.0],
+            [-1.0, 6.0, 1.0, 3.0],
+            [-1.0, 1.0, 7.0, 3.0],
+        ]) / 10
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ]) / 10
+        matrix_w = np.array([
+            [-.5, .5, .8],
+            [2.0, -1.0, 1.0],
+            [3.0, 5.0, -2.0],
+        ]) / 10
+        prev_state_vector = np.array([.5, .1, -.8])
+
+        for input_x_integer in range(4):
+            for label_y_integer in range(4):
+                logger.debug('input_x=%d, label_y=%d' % (input_x_integer, label_y_integer))
+                u_times_onehot_x = matrix_u[:, input_x_integer]
+
+                test = DerivativeVerifier.check_theoretical_derivative_equals_numerical_diff(
+                    lambda w: Utilities.loss_from_matrix_w_prev_state(w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=True),
+                    lambda w: Utilities.loss_from_matrix_w_derivative_wrt_w(
+                        w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=True),
+                    matrix_w, error_relative_to_delta_x=1, print_diff=True)
+
+                numerical_jacobian_diff_matrix = DerivativeVerifier.numerical_jacobian_diff_matrix(
+                    lambda w: Utilities.loss_from_matrix_w_prev_state(w, prev_state_vector, u_times_onehot_x, matrix_v, label_y_integer, print_debug=False),
+                    matrix_x_0=matrix_w,delta_x_scalar=1e-7)
+                logger.debug('numerical diff jacobian/delta=\n%s\n' % (numerical_jacobian_diff_matrix / 1e-7))
+
+                self.assertTrue(test)
 
 
 if __name__ == '__main__':
