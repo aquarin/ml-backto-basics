@@ -146,7 +146,7 @@ class RnnWithNumpy:
         # Computing the Jacobian matrix of: partial(loss)/partial(matrix_u)
         # See comments within computational_utils.py, loss_from_matrix_u_derivative_wrt_u()
         partial_loss_partial_new_state = np.matmul(probs_minus_y_one_shot, matrix_v)
-        sech_before_activation_state_vector = 1 / np.cosh(current_state_before_activation)
+        sech_before_activation_state_vector = 1 / (np.cosh(current_state_before_activation) ** 2)
         partial_loss_partial_before_activation_vector = np.multiply(partial_loss_partial_new_state, sech_before_tanh_vector)
 
         # According to my notes, partial(loss)/partial(u_at_column_x) equals to partial_loss_partial_before_activation_vector times 1

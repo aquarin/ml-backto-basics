@@ -187,8 +187,8 @@ class Utilities:
         # this equals (probs_vector - y_one_hot_vector) times matrix_v. See my notes for more detailed calculations.
         partial_loss_partial_new_state = np.matmul(probs_minus_y_one_shot, matrix_v)
 
-        # derivative of tanh is sech
-        sech_before_tanh_vector = 1 / np.cosh(before_tanh_vector)
+        # derivative of tanh is sech ^ 2
+        sech_before_tanh_vector = 1 / (np.cosh(before_tanh_vector) ** 2)
 
         # partial(loss) / partial(U(j, k)) = 0 when k != x. This is non-zero only for U(j, input_x_integer), a non-zero column.
         # use np.multiply here for a member-wise multiplication.
