@@ -9,6 +9,8 @@ Purpose of doing this:
   * Help myself go back to the ML basics and get better understanding, rather than using wrapped libraries.
   * Using this code to clearly explain what happens in an RNN to help others.
   * Performance optimization is not a goal, code clarity is more important.
+
+  NOTES: there is no bias term here. Probably I should add bias some time later.
 '''
 class RnnWithNumpy:
     def __init__(self, dim_vocab, dim_hidden):
@@ -24,11 +26,11 @@ class RnnWithNumpy:
         # Transforms previous state (s[t-1]) into part of next state, before activation.
         self.matrix_w = np.random.uniform(-1, 1, dim_hidden * dim_hidden).reshape(dim_hidden, dim_hidden)
 
-        self.prev_state = np.zeros(dim_hidden)
+        self.prev_state_vector = np.zeros(dim_hidden)
 
 
     @staticmethod
-    def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_w, matrix_v, prev_state,
+    def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_w, matrix_v, prev_state_vector,
         check_shapes=True, print_debug=False):
         if check_shapes:
             assert isinstance(input_x_as_integer, int)
@@ -38,46 +40,64 @@ class RnnWithNumpy:
             assert matrix_u.shape[0] == dim_hidden and matrix_u.shape[1] == dim_vocab
             assert matrix_v.shape[0] == dim_vocab and matrix_v.shape[1] == dim_hidden
             assert matrix_w.shape[0] == matrix_w.shape[1] == dim_hidden
-            assert prev_state.ndim == 1
-            assert prev_state.size == dim_hidden
+            assert prev_state_vector.ndim == 1
+            assert prev_state_vector.size == dim_hidden
             assert input_x_as_integer >= 0 and input_x_as_integer < dim_vocab
 
         matrix_u_times_x_onehot = matrix_u[:, input_x_as_integer]
-        w_times_prev_state = np.matmul(matrix_w, prev_state)
+        w_times_prev_state = np.matmul(matrix_w, prev_state_vector)
         current_state_before_activation = matrix_u_times_x_onehot + w_times_prev_state
         current_state = np.tanh(current_state_before_activation)
         logits = np.matmul(matrix_v, current_state)
-        probabilities = Utilities.softmax(logits)
+        softmax_probabilities = Utilities.softmax(logits)
 
         if check_shapes:
-            assert probabilities.ndim == 1 and probabilities.size == dim_vocab
+            assert softmax_probabilities.ndim == 1 and softmax_probabilities.size == dim_vocab
             assert current_state.ndim == 1 and current_state.size == dim_hidden
 
         forward_computation_intermediates = (
             input_x_as_integer,
-            matrix_u, matrix_v, matrix_w, prev_state
+            matrix_u, matrix_v, matrix_w, prev_state_vector
             matrix_u_times_x_onehot, w_times_prev_state, current_state_before_activation,
-            current_state, logits, probabilities)
+            current_state, logits, softmax_probabilities)
 
         return forward_computation_intermediates
 
 
     @staticmethod
-    def predict(dim_vocab, probabilities, check_shapes=True):
+    def predict_with_softmax_output(dim_vocab, softmax_probabilities, check_shapes=True, print_debug=False):
         if check_shapes:
-            assert probabilities.ndim == 1 and probabilities.size == dim_vocab
+            assert softmax_probabilities.ndim == 1 and softmax_probabilities.size == dim_vocab
 
-        return np.argmax(probabilities)
+        return np.argmax(softmax_probabilities)
+
+
+    def forward_and_predict(self, input_x_as_integer, check_shapes=True):
+        if check_shapes:
+            assert isinstance(input_x_as_integer, int)
+            assert input_x_as_integer >= 0 and input_x_as_integer < self.dim_vocab
+
+        forward_computation_intermediates = self.forward(
+            input_x_as_integer, self.dim_vocab, self.dim_hidden, self.matrix_u, self.matrix_w, self.matrix_v, self.prev_state_vector,
+            check_shapes=check_shapes, print_debug=print_debug)
+
+        (input_x_as_integer,
+            matrix_u, matrix_v, matrix_w, prev_state_vector
+            matrix_u_times_x_onehot, w_times_prev_state, current_state_before_activation,
+            current_state, logits, softmax_probabilities) = forward_computation_intermediates
+
+        return self.predict_with_softmax_output(self.dim_vocab, softmax_probabilities, check_shapes=check_shapes, print_debug=print_debug)
 
 
     @staticmethod
-    def loss(dim_vocab, probabilities, y_label_as_integer, check_shapes=True):
+    def loss(dim_vocab, softmax_probabilities, y_label_as_integer, check_shapes=True):
         if check_shapes:
-            assert probabilities.ndim == 1 and probabilities.size == dim_vocab
+            assert softmax_probabilities.ndim == 1 and softmax_probabilities.size == dim_vocab
             assert isinstance(y_label_as_output, int)
             assert y_label_as_integer >= 0 and y_label_as_integer < dim_vocab
+            assert (softmax_probabilities >= 0).all() and (softmax_probabilities <= 1).all()
 
-        return - math.log(probabilities[y_label_as_integer])
+        return - math.log(softmax_probabilities[y_label_as_integer])
 
 
     @staticmethod
@@ -147,5 +167,29 @@ class RnnWithNumpy:
         return (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w)
 
 
-    def step(self, gradient, step_size):
-        pass
+    @staticmethod
+    def bptt(forward_computation_intermediates_array, label_y_integer_seq, seq_len, dim_vocab, dim_hidden, truncation_len, trimming_box_radius=5, check_shapes=True):
+        if check_shapes:
+            assert isinstance(label_y_integer_seq, list)
+            assert isinstance(label_y_integer_seq[0], int)
+            assert len(label_y_integer_seq) == seq_len
+
+        for t in revsersed(range(seq_len)):
+            # Calculate gradients for U, V, W at time t, using input_x[t], label_y[t]
+            # but for forward_computation_intermediates_array[t].current_state, it's a function of forward_computation_intermediates_array[t-1].current_state and W
+
+
+    def step_parameters(self, loss_gradient_u_v_w, step_size, check_shapes=True):
+        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = loss_gradient_u_v_w
+        if check_shapes:
+            assert partial_loss_partial_u.shape == self.matrix_u.shape
+            assert partial_loss_partial_v.shape == self.matrix_v.shape
+            assert partial_loss_partial_w.shape == self.matrix_w.shape
+
+        self.matrix_u -= partial_loss_partial_u.shape * step_size
+        self.matrix_v -= partial_loss_partial_v.shape * step_size
+        self.matrix_w -= partial_loss_partial_w.shape * step_size
+
+
+
+
