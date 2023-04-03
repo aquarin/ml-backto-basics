@@ -1,6 +1,11 @@
+import logging
 import math
 import numpy as np
+import pickle
+
 from computational_utils import Utilities
+
+logger = logging.getLogger(__name__)
 
 '''
 Implementing RNN with only numpy, not using any other frameworks (such as PyTorch or Tensorflow)
@@ -57,7 +62,7 @@ class RnnWithNumpy:
 
         forward_computation_intermediates = (
             input_x_as_integer,
-            matrix_u, matrix_v, matrix_w, prev_state_vector
+            matrix_u, matrix_v, matrix_w, prev_state_vector,
             matrix_u_times_x_onehot, w_times_prev_state, current_state_before_activation,
             current_state, logits, softmax_probabilities)
 
@@ -82,7 +87,7 @@ class RnnWithNumpy:
             check_shapes=check_shapes, print_debug=print_debug)
 
         (input_x_as_integer,
-            matrix_u, matrix_v, matrix_w, prev_state_vector
+            matrix_u, matrix_v, matrix_w, prev_state_vector,
             matrix_u_times_x_onehot, w_times_prev_state, current_state_before_activation,
             current_state, logits, softmax_probabilities) = forward_computation_intermediates
 
@@ -175,6 +180,7 @@ class RnnWithNumpy:
             assert len(label_y_integer_seq) == seq_len
 
         for t in revsersed(range(seq_len)):
+            pass
             # Calculate gradients for U, V, W at time t, using input_x[t], label_y[t]
             # but for forward_computation_intermediates_array[t].current_state, it's a function of forward_computation_intermediates_array[t-1].current_state and W
 
@@ -182,8 +188,9 @@ class RnnWithNumpy:
     # Returns a Jacobian matrix of partial(state_vector@time_t) / partial(matrix_w)
     # See my notes, due to state_vector@time_t is a function of F(W, state_vector@time_t_minus_1), this will be calculated recursively.
     @staticmethod
-    def partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=None):
-        if truncation_len <= 0 or current_time <= 0
+    def bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10,
+        check_shapes=True, debug_output_dict=None, print_debug=False):
+        if truncation_len <= 0 or current_time <= 0:
             logger.debug('Returning 0 due to hitting truncation or current_time == 0, truncation_len=%d, current_time=%d'
                 % (truncation_len, current_time))
 
@@ -191,7 +198,7 @@ class RnnWithNumpy:
             return 0
 
         if check_shapes:
-            assert matrix_w.shape = (dim_hidden, dim_hidden)
+            assert matrix_w.shape == (dim_hidden, dim_hidden)
 
         current_state = states_array_indexed_by_time[current_time]
 
@@ -211,9 +218,9 @@ class RnnWithNumpy:
             if check_shapes:
                 assert prev_state_vector.ndim == 1 and prev_state_vector.size == dim_hidden
             partial_f_partial_param_1 = np.full([dim_hidden, dim_hidden], None, dtype=object)
-            for i in range(hidden_dim):
-                for j in range(hidden_dim):
-                    partial_f_partial_param_1[i][j] = np.zeros().T
+            for i in range(dim_hidden):
+                for j in range(dim_hidden):
+                    partial_f_partial_param_1[i][j] = np.zeros(dim_hidden).T
                     partial_f_partial_param_1[i][j][i] = prev_state_vector[j]
 
             return partial_f_partial_param_1
@@ -224,19 +231,35 @@ class RnnWithNumpy:
         # See my notes.
         partial_f_partial_param_2 = matrix_w
 
-        partial_prev_state_partial_matrix_w = partial_state_time_t_partial_matrix_w(
-            states_array_indexed_by_time, current_time - 1, dim_hidden, matrix_w, truncation_len - 1, check_shapes)
+        partial_prev_state_partial_matrix_w = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
+            states_array_indexed_by_time, current_time - 1, dim_hidden, matrix_w, truncation_len - 1, check_shapes=check_shapes,
+            debug_output_dict=None, print_debug=print_debug)
 
-        partial_state_raw_partial_w = partial_f_partial_param_1 + np.matmul(partial_f_partial_param_2, partial_prev_state_partial_matrix_w)
+        partial_state_raw_partial_w = partial_f_partial_param_1 + (
+            0 if (
+                np.isscalar(partial_prev_state_partial_matrix_w) and partial_prev_state_partial_matrix_w == 0)
+            else np.matmul(partial_f_partial_param_2, partial_prev_state_partial_matrix_w))
         partial_state_partial_w = np.matmul(diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
 
-        if debug_output_dict:
+        if print_debug and debug_output_dict == None:
+            # Just to avoid duplicate debug tracing code in below.
+            debug_output_dict = {}
+
+        if debug_output_dict != None:
+            debug_output_dict['current_state'] = current_state
+            debug_output_dict['prev_state'] = states_array_indexed_by_time[current_time - 1]
             debug_output_dict['diag_matrix_partial_state_partial_state_raw'] = diag_matrix_partial_state_partial_state_raw
             debug_output_dict['partial_f_partial_param_1'] = partial_f_partial_param_1
             debug_output_dict['partial_f_partial_param_2'] = partial_f_partial_param_2
             debug_output_dict['partial_prev_state_partial_matrix_w'] = partial_prev_state_partial_matrix_w
-            debug_output_dict['partial_prev_state_partial_matrix_w'] = partial_prev_state_partial_matrix_w
             debug_output_dict['partial_state_partial_w'] = partial_state_partial_w
+
+            with open('bptt_test_current_time_%d.pkl' % current_time, 'wb') as f:
+                pickle.dump(debug_output_dict, f)
+
+        if print_debug:
+            logger.debug('==================At current_time = %d:=================' % current_time)
+            logger.debug(debug_output_dict)
 
         return partial_state_partial_w
 
