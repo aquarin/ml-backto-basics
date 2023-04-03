@@ -182,8 +182,11 @@ class RnnWithNumpy:
     # Returns a Jacobian matrix of partial(state_vector@time_t) / partial(matrix_w)
     # See my notes, due to state_vector@time_t is a function of F(W, state_vector@time_t_minus_1), this will be calculated recursively.
     @staticmethod
-    def partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True):
+    def partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=None):
         if truncation_len <= 0 or current_time <= 0
+            logger.debug('Returning 0 due to hitting truncation or current_time == 0, truncation_len=%d, current_time=%d'
+                % (truncation_len, current_time))
+
             # TODO: check if just a simple zero works, or should I need a size-aligned three dimensional zero matrix.
             return 0
 
@@ -226,6 +229,15 @@ class RnnWithNumpy:
 
         partial_state_raw_partial_w = partial_f_partial_param_1 + np.matmul(partial_f_partial_param_2, partial_prev_state_partial_matrix_w)
         partial_state_partial_w = np.matmul(diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
+
+        if debug_output_dict:
+            debug_output_dict['diag_matrix_partial_state_partial_state_raw'] = diag_matrix_partial_state_partial_state_raw
+            debug_output_dict['partial_f_partial_param_1'] = partial_f_partial_param_1
+            debug_output_dict['partial_f_partial_param_2'] = partial_f_partial_param_2
+            debug_output_dict['partial_prev_state_partial_matrix_w'] = partial_prev_state_partial_matrix_w
+            debug_output_dict['partial_prev_state_partial_matrix_w'] = partial_prev_state_partial_matrix_w
+            debug_output_dict['partial_state_partial_w'] = partial_state_partial_w
+
         return partial_state_partial_w
 
 
