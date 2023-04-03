@@ -238,7 +238,7 @@ class RnnWithNumpy:
         partial_state_raw_partial_w = partial_f_partial_param_1 + (
             0 if (
                 np.isscalar(partial_prev_state_partial_matrix_w) and partial_prev_state_partial_matrix_w == 0)
-            else np.matmul(partial_f_partial_param_2, partial_prev_state_partial_matrix_w))
+            else np.matmul(partial_f_partial_param_2.T, partial_prev_state_partial_matrix_w))
         partial_state_partial_w = np.matmul(diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
 
         if print_debug and debug_output_dict == None:
