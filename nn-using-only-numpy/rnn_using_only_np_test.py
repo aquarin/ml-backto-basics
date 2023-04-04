@@ -5,6 +5,7 @@ import unittest
 
 import numpy as np
 
+from computational_utils import Utilities
 from derivative_verifier import DerivativeVerifier
 from rnn_using_only_numpy import RnnWithNumpy
 
@@ -265,6 +266,74 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
 
         for index, sub_matrix in np.ndenumerate(numerical_jacobian_derivative):
             np.testing.assert_almost_equal(sub_matrix, bptt_partial_state_partial_w_at_time_n[index], 5)
+
+    def test_forward_sequence(self):
+        dim_hidden = 3
+        dim_vocab = 4
+        matrix_w = (np.array([
+            [.1, .2, .3],
+            [.4, .5, .6],
+            [.7, .8, .9],
+        ]) - .5) / 3
+        state_vector_time_negative_1 = np.zeros(dim_hidden)
+        matrix_u = np.array([
+            [.5, 0, 0, 0],
+            [0, .5, 0, .2],
+            [0, 0, .5, .2],
+        ])
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ]) / 30
+        input_x_integers_by_time = [1, 3, 0, 1, 2, 0, 2, 2]
+
+        forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
+            input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
+
+        logger.debug(forward_computation_intermediates_array)
+
+        prev_state = state_vector_time_negative_1
+        assert len(forward_computation_intermediates_array) == len(input_x_integers_by_time)
+        for t in range(len(input_x_integers_by_time)):
+            state_vector = np.tanh(np.matmul(matrix_w, prev_state) + matrix_u[:, input_x_integers_by_time[t]])
+
+            logger.debug('t=%d, prev_state=%s, state_vector=%s, forward_computation_intermediates[][current_state]=%s, forward_computation_intermediates[][prev_state_vector]=%s'
+                %(t, prev_state, state_vector, forward_computation_intermediates_array[t]['current_state'], forward_computation_intermediates_array[t]['prev_state_vector']))
+
+            logits = np.matmul(matrix_v, state_vector)
+            softmax_probabilities = Utilities.softmax(logits)
+
+            np.testing.assert_almost_equal(state_vector, forward_computation_intermediates_array[t]['current_state'], 6)
+            np.testing.assert_almost_equal(logits, forward_computation_intermediates_array[t]['logits'], 6)
+            np.testing.assert_almost_equal(softmax_probabilities, forward_computation_intermediates_array[t]['softmax_probabilities'], 6)
+            prev_state = state_vector
+
+
+    def test_sequence_loss(self):
+        dim_vocab = 4
+
+        label_y_int_array = [0, 1, 3, 1, 3, 2]
+
+        softmax_probabilities_series = np.array([
+            # Doesn't sum to zero. No time to make a very neat test probabilities array.
+            [.01, .01, .01, 1.0],
+            [.01, .8, .01, .2],
+            [.01, .01, .01, 1.0],
+            [.01, .3, .01, 1.0],
+            [.01, .3, .01, 1.0],
+            [.01, .3, .41, .3],
+        ])
+
+        expected_total_loss = -(
+            math.log(.01) + math.log(.8) + math.log(1.0) + math.log(.3) + math.log(1.0) + math.log(.41)) / 6.0
+
+        np.testing.assert_almost_equal(expected_total_loss,
+            RnnWithNumpy.sequence_loss(dim_vocab=dim_vocab, probabilities_time_series=softmax_probabilities_series, label_y_int_array=label_y_int_array,
+                check_shapes=True))
 
 
 if __name__ == '__main__':

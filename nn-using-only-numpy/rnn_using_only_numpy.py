@@ -35,7 +35,7 @@ class RnnWithNumpy:
 
 
     @staticmethod
-    def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_w, matrix_v, prev_state_vector,
+    def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w, prev_state_vector,
         check_shapes=True, print_debug=False):
         if check_shapes:
             assert isinstance(input_x_as_integer, int)
@@ -60,13 +60,69 @@ class RnnWithNumpy:
             assert softmax_probabilities.ndim == 1 and softmax_probabilities.size == dim_vocab
             assert current_state.ndim == 1 and current_state.size == dim_hidden
 
-        forward_computation_intermediates = (
-            input_x_as_integer,
-            matrix_u, matrix_v, matrix_w, prev_state_vector,
-            matrix_u_times_x_onehot, w_times_prev_state, current_state_before_activation,
-            current_state, logits, softmax_probabilities)
+        forward_computation_intermediates = {
+            'input_x_as_integer': input_x_as_integer,
+            'matrix_u': matrix_u,
+            'matrix_v': matrix_v,
+            'matrix_w': matrix_w,
+            'prev_state_vector': prev_state_vector,
+            'matrix_u_times_x_onehot': matrix_u_times_x_onehot,
+            'w_times_prev_state': w_times_prev_state,
+            'current_state_before_activation': current_state_before_activation,
+            'current_state': current_state,
+            'logits': logits,
+            'softmax_probabilities': softmax_probabilities,
+        }
 
         return forward_computation_intermediates
+
+
+    @staticmethod
+    def forward_sequence(input_x_int_array, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w,
+        start_state_vector=None, check_shapes=True, print_debug=False):
+        if check_shapes:
+            assert matrix_u.ndim == 2
+            assert matrix_v.ndim == 2
+            assert matrix_w.ndim == 2
+            assert matrix_u.shape[0] == dim_hidden and matrix_u.shape[1] == dim_vocab
+            assert matrix_v.shape[0] == dim_vocab and matrix_v.shape[1] == dim_hidden
+            assert matrix_w.shape[0] == matrix_w.shape[1] == dim_hidden
+            assert start_state_vector.ndim == 1
+            assert start_state_vector.size == dim_hidden
+
+        forward_computation_intermediates_array = []
+        prev_state_vector = start_state_vector if start_state_vector is None else np.zeros(dim_hidden)
+
+        for input_x_as_integer in input_x_int_array:
+            if check_shapes:
+                assert isinstance(input_x_as_integer, int)
+                assert input_x_as_integer >= 0 and input_x_as_integer < dim_vocab
+
+            forward_computation_intermediates = RnnWithNumpy.forward(
+                input_x_as_integer=input_x_as_integer, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+                matrix_u=matrix_u, matrix_w=matrix_w, matrix_v=matrix_v, prev_state_vector=prev_state_vector,
+                check_shapes=check_shapes, print_debug=print_debug)
+
+            forward_computation_intermediates_array.append(forward_computation_intermediates)
+            prev_state_vector = forward_computation_intermediates['current_state']
+            if check_shapes:
+                assert prev_state_vector.ndim == 1 and prev_state_vector.size == dim_hidden
+
+        return forward_computation_intermediates_array
+
+
+    @staticmethod
+    def sequence_loss(dim_vocab, probabilities_time_series, label_y_int_array, check_shapes=True):
+        assert len(probabilities_time_series) == len(label_y_int_array)
+        total_loss = 0
+
+        for t in range(len(label_y_int_array)):
+            softmax_probabilities = probabilities_time_series[t]
+            loss = RnnWithNumpy.loss(dim_vocab=dim_vocab, softmax_probabilities=softmax_probabilities,
+                y_label_as_integer=label_y_int_array[t], check_shapes=check_shapes)
+            total_loss += loss
+
+        return total_loss / float(len(label_y_int_array))
 
 
     @staticmethod
@@ -98,7 +154,7 @@ class RnnWithNumpy:
     def loss(dim_vocab, softmax_probabilities, y_label_as_integer, check_shapes=True):
         if check_shapes:
             assert softmax_probabilities.ndim == 1 and softmax_probabilities.size == dim_vocab
-            assert isinstance(y_label_as_output, int)
+            assert isinstance(y_label_as_integer, int)
             assert y_label_as_integer >= 0 and y_label_as_integer < dim_vocab
             assert (softmax_probabilities >= 0).all() and (softmax_probabilities <= 1).all()
 
@@ -173,6 +229,12 @@ class RnnWithNumpy:
 
 
     @staticmethod
+    def sequence_loss_gradient_u_v_w(forward_computation_intermediates_array,
+        label_y_int_array, dim_vocab, dim_hidden, bptt_truncation_len=10, check_shapes=True):
+        pass
+
+
+    @staticmethod
     def bptt(forward_computation_intermediates_array, label_y_integer_seq, seq_len, dim_vocab, dim_hidden, truncation_len, trimming_box_radius=5, check_shapes=True):
         if check_shapes:
             assert isinstance(label_y_integer_seq, list)
@@ -214,6 +276,7 @@ class RnnWithNumpy:
         # Note that state_vector_t_minus_1 is also a function of (W, state_vector_t_minus_2)
         # So partial(F)/partial(W) = partial(F)/parital(F parameter 1) + partial(F)/partial(F parameter 2) * partial(state_vector_t_minus_1) / partial(W)
 
+        # TODO: this can be replaced with a einsum().
         def _create_partial_f_partial_param_1(prev_state_vector):
             if check_shapes:
                 assert prev_state_vector.ndim == 1 and prev_state_vector.size == dim_hidden
