@@ -228,18 +228,27 @@ class RnnWithNumpy:
         # Computing the Jacobian matrix of: partial(loss)/partial(matrix_u)
         # See comments within computational_utils.py, loss_from_matrix_u_derivative_wrt_u()
         partial_loss_partial_new_state = np.matmul(probs_minus_y_one_shot, matrix_v)
-        partial_new_state_partial_raw_state = np.diag(1 - current_state ** 2)
-        partial_loss_partial_raw_state = np.matmul(partial_loss_partial_new_state, partial_new_state_partial_raw_state)
 
-        logger.debug("#### step=%d, partial_loss_partial_raw_state=%s\n, current_state=%s\n, partial_new_state_partial_raw_state=%s\n",
-            current_time, partial_loss_partial_raw_state, current_state, partial_new_state_partial_raw_state)
+        states_array_indexed_by_time = list(map(lambda computed: computed['current_state'], forward_computation_intermediates_array))
+        input_x_time_series = list(map(lambda computed: computed['input_x_as_integer'], forward_computation_intermediates_array))
 
-        # According to my notes, partial(loss)/partial(u_at_column_x) equals to partial_loss_partial_raw_state times 1
-        partial_loss_partial_u_at_x = partial_loss_partial_raw_state
-        partial_loss_partial_u = np.zeros([dim_hidden, dim_vocab])
-        partial_loss_partial_u[:, input_x_as_integer] = partial_loss_partial_u_at_x
+        partial_state_partial_u = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_u(
+            states_array_indexed_by_time=states_array_indexed_by_time,
+            input_x_time_series=input_x_time_series, current_time=current_time, dim_hidden=dim_hidden,
+            dim_vocab=dim_vocab, matrix_w=matrix_w, matrix_u=matrix_u, truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False)
 
-        logger.debug('#### step=%d, partial_loss_partial_u=\n%s\n', current_time, partial_loss_partial_u)
+        logger.debug('#### step=%d, partial_loss_partial_new_state=\n%s\n, shape=%s\n partial_state_partial_u=\n%s\nshape=%s',
+            current_time, partial_loss_partial_new_state, np.shape(partial_loss_partial_new_state),
+            partial_state_partial_u, np.shape(partial_state_partial_u))
+        if check_shapes:
+            # Why not (dim_hidden, dim_vocab, 1, dim_hidden) (a 2d matrix of column vectors)? Because I have messed up the transposition in somewhere.
+            assert partial_state_partial_u.shape == (dim_hidden, dim_vocab, dim_hidden)
+         
+        # Frankly, I don't totally understand the mechanism behind "i,ijkl->il". I want to do a multiplication between a row vector and a 3d matrix.
+        # I just figured this out by trial and error. Probably I should learn why this worked, when I have more time.
+        partial_loss_partial_u = np.einsum('k,ijk->ij', partial_loss_partial_new_state, partial_state_partial_u)
+        logger.debug('#### step=%d, partial_state_partial_u=\n%s\n, partial_loss_partial_u=\n%s\n,shape=%s',
+            current_time, partial_state_partial_u, partial_loss_partial_u, np.shape(partial_loss_partial_u))
 
         if check_shapes:
             assert partial_loss_partial_u.shape == matrix_u.shape
@@ -247,7 +256,6 @@ class RnnWithNumpy:
         # Computing the Jacobian matrix of: partial(loss)/partial(matrix_w)
         # See comments within computational_utils.py, loss_from_matrix_w_derivative_wrt_w()
 
-        states_array_indexed_by_time = list(map(lambda computed: computed['current_state'], forward_computation_intermediates_array))
         partial_state_partial_w = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             states_array_indexed_by_time=states_array_indexed_by_time, current_time=current_time,
             dim_hidden=dim_hidden, matrix_w=matrix_w, truncation_len=bptt_truncation_len,
@@ -374,6 +382,90 @@ class RnnWithNumpy:
             logger.debug(debug_output_dict)
 
         return partial_state_partial_w
+
+
+    # See my notes how the recursive calculation of this one.
+    @staticmethod
+    def bptt_partial_state_time_t_partial_matrix_u(states_array_indexed_by_time, input_x_time_series, current_time, dim_hidden,
+        dim_vocab, matrix_w, matrix_u, truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False):
+        assert len(input_x_time_series) == len(states_array_indexed_by_time)
+
+        # Note that it's comparing current_time to -1, not 0 (like in the case of W). When t=0, /partial(matrix_u) still has value
+        # , unlike the case of matrix W.
+        if truncation_len <= 0 or current_time <= -1:
+            logger.debug('Returning 0 due to hitting truncation or current_time == 0, truncation_len=%d, current_time=%d'
+                % (truncation_len, current_time))
+
+            # TODO: check if just a simple zero works, or should I need a size-aligned three dimensional zero matrix.
+            return 0
+
+        input_x_as_integer = input_x_time_series[current_time]
+        current_state = states_array_indexed_by_time[current_time]
+
+        if check_shapes:
+            assert matrix_w.shape == (dim_hidden, dim_hidden)
+            assert matrix_u.shape == (dim_hidden, dim_vocab)
+
+            assert current_state.ndim == 1 and current_state.size == dim_hidden
+            assert isinstance(input_x_as_integer, int)
+            assert input_x_as_integer >= 0 and input_x_as_integer < dim_vocab
+
+        # d(tanh)/d(x) = 1/(cosh(x)^2) = 1 - tanh(x)) ^ 2
+        partial_state_partial_raw_state = np.diag(1 - current_state ** 2)
+
+
+        x_onehot = np.zeros(dim_vocab).reshape(-1, 1)
+        x_onehot[input_x_as_integer] = 1.0
+
+        logger.debug('x_onehot=\n%s\nshape=%s', x_onehot, np.shape(x_onehot))
+
+        # Can't do this with kronecker product or einsum(). Looked online, asked ChatGPT, answers were wrong.
+        # E.g. this doesn't work: partial_u_times_x_onehot_partial_u = np.einsum('ij,kl->ijl', np.eye(dim_hidden, dim_hidden), x_onehot)
+        # And this is wrong: partial(M*v)/partial(M) = kron(eye(), v.T)
+        # So have to manually construct this 3d matrix by hand.
+        partial_u_times_x_onehot_partial_u = np.zeros([dim_hidden, dim_vocab, dim_hidden])
+        for i in range(dim_hidden):
+            partial_u_times_x_onehot_partial_u[i][input_x_as_integer][i] = 1.0
+
+        logger.debug('### partial_u_times_x_onehot_partial_u=\n%s\n, shape=%s',
+            partial_u_times_x_onehot_partial_u, partial_u_times_x_onehot_partial_u.shape)
+
+        # Finding its value recursively (bptt)
+        partial_state_t_minus_1_partial_u = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_u(
+            states_array_indexed_by_time, input_x_time_series, current_time - 1, dim_hidden,
+            dim_vocab, matrix_w, matrix_u, truncation_len=truncation_len - 1, check_shapes=check_shapes,
+            debug_output_dict=debug_output_dict, print_debug=print_debug)
+        logger.debug('### current_time=%d, partial_state_t_minus_1_partial_u=\n%s\n, shape=%s',
+            current_time,
+            partial_state_t_minus_1_partial_u, np.shape(partial_state_t_minus_1_partial_u))
+
+        w_mul_partial_state_minus_1_partial_u = (
+            0 if (np.isscalar(partial_state_t_minus_1_partial_u) and partial_state_t_minus_1_partial_u == 0)
+            # Why a transposition on matrix W here? I don't know. But putting a .T here makes things right.
+            # I am so messed up with the matrix calculus thing now. There is no documents to look up to know the right
+            # chain rules...
+            else np.einsum('ij,jkl->ikl', matrix_w.T, partial_state_t_minus_1_partial_u))
+
+        # assert np.sahpe(w_mul_partial_state_minus_1_partial_u.shape) in ((), ())
+
+        logger.debug('### w_mul_partial_state_minus_1_partial_u=\n%s\n',
+            w_mul_partial_state_minus_1_partial_u)
+        logger.debug('### partial_state_partial_raw_state=\n%s\n, shape=%s',
+            partial_state_partial_raw_state, partial_state_partial_raw_state.shape)
+
+        temp = partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u
+        logger.debug('### partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u=\n%s\n, shape=%s',
+            temp, temp.shape)
+        partial_state_partial_matrix_u = np.einsum('ij,jkl->ikl', 
+            partial_state_partial_raw_state,
+            partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
+
+        '''
+        partial_state_partial_matrix_u = np.matmul(partial_state_partial_raw_state,
+            partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
+        '''
+
+        return partial_state_partial_matrix_u
 
 
     def step_parameters(self, loss_gradient_u_v_w, step_size, check_shapes=True):

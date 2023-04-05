@@ -528,28 +528,17 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
             input_x_integers_by_time, label_y_int_array)
 
-    def test_gradient_uvw_single_step_sequence_length_6(self):
+    def test_gradient_uvw_sequence_length_n(self):
         dim_hidden = self.common_test_params['dim_hidden']
         dim_vocab = self.common_test_params['dim_vocab']
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = self.common_test_params['matrix_w']
-        input_x_integers_by_time = [1, 3, 0, 0, 2, 2]
-        label_y_int_array = [0, 1, 3, 1, 3, 2]
+        input_x_integers_by_time = [1, 0, 3, 1, 2, 3]
+        label_y_int_array = [1, 0, 3, 1, 2, 1]
 
-        forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
-            input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
-            start_state_vector=np.zeros(dim_hidden), check_shapes=True, print_debug=True)
-
-        logger.debug('forward_computation_intermediates_array type=%s', type(forward_computation_intermediates_array))
-
-        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
-            current_time=5, forward_computation_intermediates_array=forward_computation_intermediates_array,
-            label_y_as_integer=label_y_int_array[5], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-            bptt_truncation_len=10, check_shapes=True)
-
-        logger.debug('partial_loss_partial_w=%s', partial_loss_partial_w)
+        self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+            input_x_integers_by_time, label_y_int_array)
 
 
 if __name__ == '__main__':
