@@ -12,6 +12,28 @@ from rnn_using_only_numpy import RnnWithNumpy
 logger = logging.getLogger(__name__)
 
 class RnnUsingOnlyNumpyTest(unittest.TestCase):
+    common_test_params = {
+        'dim_hidden': 3,
+        'dim_vocab': 4,
+        'matrix_u': np.array([
+            [.5, 0, 0, 0],
+            [0, .5, 0, .2],
+            [0, 0, .5, .2],
+        ]),
+        'matrix_v': np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ]) / 30,
+        'matrix_w': np.array([
+            [.1, .2, .3],
+            [.4, .5, .6],
+            [.7, .8, .9],
+        ]) - .5,
+        'delta_x_scalar': 1e-5
+    }
+
     # A simplified forward process just to verify the bptt. In this forwarding, there is no logits, softmax, matrix V, involved.
     @staticmethod
     def forward_with_only_state_vector(dim_hidden, dim_vocab, state_vector_time_negative_1, matrix_w, matrix_u, input_x_integers_by_time):
@@ -267,6 +289,53 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         for index, sub_matrix in np.ndenumerate(numerical_jacobian_derivative):
             np.testing.assert_almost_equal(sub_matrix, bptt_partial_state_partial_w_at_time_n[index], 5)
 
+    def test_forward_sequence_len_1(self):
+        dim_hidden = 3
+        dim_vocab = 4
+        matrix_w = (np.array([
+            [.1, .2, .3],
+            [.4, .5, .6],
+            [.7, .8, .9],
+        ]) - .5) / 3
+        state_vector_time_negative_1 = np.zeros(dim_hidden)
+        matrix_u = np.array([
+            [.5, 0, 0, 0],
+            [0, .5, 0, .2],
+            [0, 0, .5, .2],
+        ])
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ]) / 30
+        input_x_integers_by_time = [1]
+
+        forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
+            input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
+
+        logger.debug(forward_computation_intermediates_array)
+        logger.debug('forward_computation_intermediates_array type=%s', type(forward_computation_intermediates_array))
+
+        prev_state = state_vector_time_negative_1
+        assert len(forward_computation_intermediates_array) == len(input_x_integers_by_time)
+        for t in range(len(input_x_integers_by_time)):
+            state_vector = np.tanh(np.matmul(matrix_w, prev_state) + matrix_u[:, input_x_integers_by_time[t]])
+
+            logger.debug('t=%d, prev_state=%s, state_vector=%s, forward_computation_intermediates[][current_state]=%s, forward_computation_intermediates[][prev_state_vector]=%s'
+                %(t, prev_state, state_vector, forward_computation_intermediates_array[t]['current_state'], forward_computation_intermediates_array[t]['prev_state_vector']))
+
+            logits = np.matmul(matrix_v, state_vector)
+            softmax_probabilities = Utilities.softmax(logits)
+
+            np.testing.assert_almost_equal(state_vector, forward_computation_intermediates_array[t]['current_state'], 6)
+            np.testing.assert_almost_equal(logits, forward_computation_intermediates_array[t]['logits'], 6)
+            np.testing.assert_almost_equal(softmax_probabilities, forward_computation_intermediates_array[t]['softmax_probabilities'], 6)
+            prev_state = state_vector
+
+
     def test_forward_sequence(self):
         dim_hidden = 3
         dim_vocab = 4
@@ -334,6 +403,130 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         np.testing.assert_almost_equal(expected_total_loss,
             RnnWithNumpy.sequence_loss(dim_vocab=dim_vocab, probabilities_time_series=softmax_probabilities_series, label_y_int_array=label_y_int_array,
                 check_shapes=True))
+
+
+    @staticmethod
+    def verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+        input_x_integers_by_time, label_y_int_by_time):
+
+        state_vector_time_negative_1 = np.zeros(dim_hidden)
+
+        forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
+            input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
+
+        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
+            current_time=0, forward_computation_intermediates_array=forward_computation_intermediates_array,
+            label_y_as_integer=label_y_int_by_time[0], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            bptt_truncation_len=10, check_shapes=True)
+
+        logger.debug("partial_loss_partial_v=\n%s\n", partial_loss_partial_v)
+        logger.debug("partial_loss_partial_w=\n%s\n", partial_loss_partial_w)
+
+        delta_x = 1e-5
+        def _loss_as_function_of_matrix_u(matrix_u_func):
+            computed_intermediaries_array = RnnWithNumpy.forward_sequence(
+                input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+                matrix_u=matrix_u_func, matrix_v=matrix_v, matrix_w=matrix_w,
+                start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
+            total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
+                dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
+                label_y_int_array=label_y_int_by_time, check_shapes=True)
+            return total_loss
+        def _loss_as_function_of_matrix_v(matrix_v_func):
+            computed_intermediaries_array = RnnWithNumpy.forward_sequence(
+                input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+                matrix_u=matrix_u, matrix_v=matrix_v_func, matrix_w=matrix_w,
+                start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
+            total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
+                dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
+                label_y_int_array=label_y_int_by_time, check_shapes=True)
+            return total_loss
+        def _loss_as_function_of_matrix_w(matrix_w_func):
+            computed_intermediaries_array = RnnWithNumpy.forward_sequence(
+                input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+                matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w_func,
+                start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
+            total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
+                dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
+                label_y_int_array=label_y_int_by_time, check_shapes=True)
+            return total_loss
+
+        numerical_partial_loss_partial_u = DerivativeVerifier.numerical_jacobian_diff_matrix(
+            func=_loss_as_function_of_matrix_u,
+            matrix_x_0=matrix_u, delta_x_scalar=delta_x) / delta_x
+        logger.debug("partial_loss_partial_u=\n%s\n", partial_loss_partial_u)
+        logger.debug("numerical_partial_loss_partial_u=\n%s\n", numerical_partial_loss_partial_u)
+
+        np.testing.assert_almost_equal(partial_loss_partial_u, numerical_partial_loss_partial_u, 3)
+
+        numerical_partial_loss_partial_v = DerivativeVerifier.numerical_jacobian_diff_matrix(
+            func=_loss_as_function_of_matrix_v,
+            matrix_x_0=matrix_v, delta_x_scalar=delta_x) / delta_x
+        logger.debug("partial_loss_partial_v=\n%s\n", partial_loss_partial_v)
+        logger.debug("numerical_partial_loss_partial_v=\n%s\n", numerical_partial_loss_partial_v)
+
+        np.testing.assert_almost_equal(partial_loss_partial_v, numerical_partial_loss_partial_v, 3)
+
+        numerical_partial_loss_partial_w = DerivativeVerifier.numerical_jacobian_diff_matrix(
+            func=_loss_as_function_of_matrix_w,
+            matrix_x_0=matrix_w, delta_x_scalar=delta_x) / delta_x
+        logger.debug("partial_loss_partial_w=\n%s\n", partial_loss_partial_w)
+        logger.debug("numerical_partial_loss_partial_w=\n%s\n", numerical_partial_loss_partial_w)
+
+        np.testing.assert_almost_equal(partial_loss_partial_w, numerical_partial_loss_partial_w, 3)
+
+
+    def test_gradient_uvw_single_step(self):
+        dim_hidden = self.common_test_params['dim_hidden']
+        dim_vocab = self.common_test_params['dim_vocab']
+        matrix_u = self.common_test_params['matrix_u']
+        matrix_v = self.common_test_params['matrix_v']
+        matrix_w = self.common_test_params['matrix_w']
+        input_x_integers_by_time = [1]
+        label_y_int_array = [0]
+
+        self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+            input_x_integers_by_time, label_y_int_array)
+
+
+    def test_gradient_uvw_single_step_sequence_length_6(self):
+        dim_hidden = 3
+        dim_vocab = 4
+        label_y_int_array = [0, 1, 3, 1, 3, 2]
+        matrix_w = (np.array([
+            [.1, .2, .3],
+            [.4, .5, .6],
+            [.7, .8, .9],
+        ]) - .5) / 3
+        state_vector_time_negative_1 = np.zeros(dim_hidden)
+        matrix_u = np.array([
+            [.5, 0, 0, 0],
+            [0, .5, 0, .2],
+            [0, 0, .5, .2],
+        ])
+        matrix_v = np.array([
+            [9, 1, 2],
+            [1, 8, 3],
+            [0., 1.5, 7],
+            [4, 5, 1],
+        ]) / 30
+        input_x_integers_by_time = [1, 3, 0, 0, 2, 2]
+
+        forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
+            input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
+
+        logger.debug('forward_computation_intermediates_array type=%s', type(forward_computation_intermediates_array))
+
+        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
+            current_time=5, forward_computation_intermediates_array=forward_computation_intermediates_array,
+            label_y_as_integer=label_y_int_array[5], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            bptt_truncation_len=10, check_shapes=True)
+
+        logger.debug('partial_loss_partial_w=%s', partial_loss_partial_w)
 
 
 if __name__ == '__main__':
