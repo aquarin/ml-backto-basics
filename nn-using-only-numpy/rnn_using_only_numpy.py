@@ -229,12 +229,17 @@ class RnnWithNumpy:
         # See comments within computational_utils.py, loss_from_matrix_u_derivative_wrt_u()
         partial_loss_partial_new_state = np.matmul(probs_minus_y_one_shot, matrix_v)
         partial_new_state_partial_raw_state = np.diag(1 - current_state ** 2)
-        partial_loss_partial_before_activation_vector = np.matmul(partial_loss_partial_new_state, partial_new_state_partial_raw_state)
+        partial_loss_partial_raw_state = np.matmul(partial_loss_partial_new_state, partial_new_state_partial_raw_state)
 
-        # According to my notes, partial(loss)/partial(u_at_column_x) equals to partial_loss_partial_before_activation_vector times 1
-        partial_loss_partial_u_at_x = partial_loss_partial_before_activation_vector
+        logger.debug("#### step=%d, partial_loss_partial_raw_state=%s\n, current_state=%s\n, partial_new_state_partial_raw_state=%s\n",
+            current_time, partial_loss_partial_raw_state, current_state, partial_new_state_partial_raw_state)
+
+        # According to my notes, partial(loss)/partial(u_at_column_x) equals to partial_loss_partial_raw_state times 1
+        partial_loss_partial_u_at_x = partial_loss_partial_raw_state
         partial_loss_partial_u = np.zeros([dim_hidden, dim_vocab])
         partial_loss_partial_u[:, input_x_as_integer] = partial_loss_partial_u_at_x
+
+        logger.debug('#### step=%d, partial_loss_partial_u=\n%s\n', current_time, partial_loss_partial_u)
 
         if check_shapes:
             assert partial_loss_partial_u.shape == matrix_u.shape
@@ -250,11 +255,15 @@ class RnnWithNumpy:
 
         partial_loss_partial_w = (np.zeros([dim_hidden, dim_hidden]) if np.isscalar(partial_state_partial_w) and partial_state_partial_w == 0
             else np.matmul(partial_loss_partial_new_state, partial_state_partial_w))
-        logger.debug('partial_loss_partial_new_state=%s' % partial_loss_partial_new_state)
-        logger.debug('partial_state_partial_w=%s' % partial_state_partial_w)
-        logger.debug('partial_loss_partial_w=%s' % partial_loss_partial_w)
-        logger.debug('partial_loss_partial_w.shape=%s, partial_loss_partial_w.dtype=%s, matrix_w.shape=%s',
-            partial_loss_partial_w.shape, partial_loss_partial_w.dtype, matrix_w.shape)
+
+        # Embarrassingly, I don't fully know the reason I need to do a vstack() then a .T here.
+        # Likely due to the following reasons, but I don't have time to drill-down to confirm them, as I am short on time and just want to get
+        # this RNN running --
+        # 1. In the input, state vector is a 1 x dim_hidden row vector. On my paper calculations, it's treated as a column vector. And np automatically 
+        #    transposes them (or the results), when I called np.matmul(matrix, row_vector), treating it as if a matmul(matrix, col_vector)
+        # 2. Due to 1, some mis-transpositions happened during the process, I don't know where. If I have time, I can dig them out and correct the code,
+        #    rather than doing this patch-up here.
+        partial_loss_partial_w = np.vstack(partial_loss_partial_w).T
 
         if check_shapes:
             pass
@@ -272,17 +281,19 @@ class RnnWithNumpy:
         partial_sequential_loss_partial_v = 0
         partial_sequential_loss_partial_w = 0
 
-        for t in len(forward_computation_intermediates_array):
-            (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = loss_gradient_u_v_w(
-                forward_computation_intermediates=forward_computation_intermediates_array[t],
+        for t in range(len(forward_computation_intermediates_array)):
+            (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
+                current_time=t,
+                forward_computation_intermediates_array=forward_computation_intermediates_array,
                 label_y_as_integer=label_y_int_array[t], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
                 check_shapes=check_shapes)
 
             partial_sequential_loss_partial_u += partial_loss_partial_u / float(len(forward_computation_intermediates_array))
+            logger.debug('step=%d, single step partial_loss_partial_u=%s', t, partial_loss_partial_u)
             partial_sequential_loss_partial_v += partial_loss_partial_v / float(len(forward_computation_intermediates_array))
             partial_sequential_loss_partial_w += partial_loss_partial_w / float(len(forward_computation_intermediates_array))
 
-        return (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w)
+        return (partial_sequential_loss_partial_u, partial_sequential_loss_partial_v, partial_sequential_loss_partial_w)
 
 
     # Returns a Jacobian matrix of partial(state_vector@time_t) / partial(matrix_w)

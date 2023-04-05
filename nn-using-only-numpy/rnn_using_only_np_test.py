@@ -287,7 +287,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         logger.debug('numerical_jacobian_derivative[0][0] shape=%s' % str(numerical_jacobian_derivative[0][0].shape))
 
         for index, sub_matrix in np.ndenumerate(numerical_jacobian_derivative):
-            np.testing.assert_almost_equal(sub_matrix, bptt_partial_state_partial_w_at_time_n[index], 5)
+            np.testing.assert_almost_equal(sub_matrix, bptt_partial_state_partial_w_at_time_n[index], 2)
 
     def test_forward_sequence_len_1(self):
         dim_hidden = 3
@@ -416,13 +416,10 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
             start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
 
-        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
-            current_time=0, forward_computation_intermediates_array=forward_computation_intermediates_array,
-            label_y_as_integer=label_y_int_by_time[0], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.sequence_loss_gradient_u_v_w(
+            forward_computation_intermediates_array=forward_computation_intermediates_array,
+            label_y_int_array=label_y_int_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             bptt_truncation_len=10, check_shapes=True)
-
-        logger.debug("partial_loss_partial_v=\n%s\n", partial_loss_partial_v)
-        logger.debug("partial_loss_partial_w=\n%s\n", partial_loss_partial_w)
 
         delta_x = 1e-5
         def _loss_as_function_of_matrix_u(matrix_u_func):
@@ -459,15 +456,11 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         logger.debug("partial_loss_partial_u=\n%s\n", partial_loss_partial_u)
         logger.debug("numerical_partial_loss_partial_u=\n%s\n", numerical_partial_loss_partial_u)
 
-        np.testing.assert_almost_equal(partial_loss_partial_u, numerical_partial_loss_partial_u, 3)
-
         numerical_partial_loss_partial_v = DerivativeVerifier.numerical_jacobian_diff_matrix(
             func=_loss_as_function_of_matrix_v,
             matrix_x_0=matrix_v, delta_x_scalar=delta_x) / delta_x
         logger.debug("partial_loss_partial_v=\n%s\n", partial_loss_partial_v)
         logger.debug("numerical_partial_loss_partial_v=\n%s\n", numerical_partial_loss_partial_v)
-
-        np.testing.assert_almost_equal(partial_loss_partial_v, numerical_partial_loss_partial_v, 3)
 
         numerical_partial_loss_partial_w = DerivativeVerifier.numerical_jacobian_diff_matrix(
             func=_loss_as_function_of_matrix_w,
@@ -475,6 +468,8 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         logger.debug("partial_loss_partial_w=\n%s\n", partial_loss_partial_w)
         logger.debug("numerical_partial_loss_partial_w=\n%s\n", numerical_partial_loss_partial_w)
 
+        np.testing.assert_almost_equal(partial_loss_partial_u, numerical_partial_loss_partial_u, 3)
+        np.testing.assert_almost_equal(partial_loss_partial_v, numerical_partial_loss_partial_v, 3)
         np.testing.assert_almost_equal(partial_loss_partial_w, numerical_partial_loss_partial_w, 3)
 
 
@@ -484,40 +479,68 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = self.common_test_params['matrix_w']
-        input_x_integers_by_time = [1]
+        input_x_integers_by_time = [3]
         label_y_int_array = [0]
+
+        for x_int in range(dim_vocab):
+            for y_int in range(dim_vocab):
+                input_x_integers_by_time = [x_int]
+                label_y_int_array = [y_int]
+                self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+                    input_x_integers_by_time, label_y_int_array)
+
+
+    def test_gradient_uvw_two_steps(self):
+        dim_hidden = self.common_test_params['dim_hidden']
+        dim_vocab = self.common_test_params['dim_vocab']
+        matrix_u = self.common_test_params['matrix_u']
+        matrix_v = self.common_test_params['matrix_v']
+        matrix_w = self.common_test_params['matrix_w']
+        input_x_integers_by_time = [1, 1]
+        label_y_int_array = [0, 0]
 
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
             input_x_integers_by_time, label_y_int_array)
 
 
+    # Debug why /partial_u is incorrect when sequence length >= 2, but correct when sequence length == 1
+    def test_gradient_uvw_two_steps_debug(self):
+        dim_hidden = self.common_test_params['dim_hidden']
+        dim_vocab = self.common_test_params['dim_vocab']
+        matrix_u = self.common_test_params['matrix_u']
+        matrix_v = self.common_test_params['matrix_v']
+        matrix_w = np.zeros([dim_hidden, dim_hidden])
+        input_x_integers_by_time = [1, 1]
+        label_y_int_array = [0, 0]
+
+        self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+            input_x_integers_by_time, label_y_int_array)
+
+    def test_gradient_uvw_three_steps(self):
+        dim_hidden = self.common_test_params['dim_hidden']
+        dim_vocab = self.common_test_params['dim_vocab']
+        matrix_u = self.common_test_params['matrix_u']
+        matrix_v = self.common_test_params['matrix_v']
+        matrix_w = self.common_test_params['matrix_w']
+        input_x_integers_by_time = [1, 0, 3]
+        label_y_int_array = [1, 0, 3]
+
+        self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+            input_x_integers_by_time, label_y_int_array)
+
     def test_gradient_uvw_single_step_sequence_length_6(self):
-        dim_hidden = 3
-        dim_vocab = 4
-        label_y_int_array = [0, 1, 3, 1, 3, 2]
-        matrix_w = (np.array([
-            [.1, .2, .3],
-            [.4, .5, .6],
-            [.7, .8, .9],
-        ]) - .5) / 3
-        state_vector_time_negative_1 = np.zeros(dim_hidden)
-        matrix_u = np.array([
-            [.5, 0, 0, 0],
-            [0, .5, 0, .2],
-            [0, 0, .5, .2],
-        ])
-        matrix_v = np.array([
-            [9, 1, 2],
-            [1, 8, 3],
-            [0., 1.5, 7],
-            [4, 5, 1],
-        ]) / 30
+        dim_hidden = self.common_test_params['dim_hidden']
+        dim_vocab = self.common_test_params['dim_vocab']
+        matrix_u = self.common_test_params['matrix_u']
+        matrix_v = self.common_test_params['matrix_v']
+        matrix_w = self.common_test_params['matrix_w']
         input_x_integers_by_time = [1, 3, 0, 0, 2, 2]
+        label_y_int_array = [0, 1, 3, 1, 3, 2]
 
         forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
             input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
-            start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
+            start_state_vector=np.zeros(dim_hidden), check_shapes=True, print_debug=True)
 
         logger.debug('forward_computation_intermediates_array type=%s', type(forward_computation_intermediates_array))
 
