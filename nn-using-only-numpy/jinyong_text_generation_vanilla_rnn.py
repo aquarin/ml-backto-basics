@@ -41,6 +41,7 @@ def save_model(model):
 def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
     generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
     logger.info("Generated text=%s", generated_text)
+    save_model(model)
 
 
 def test_simple_training():
@@ -52,8 +53,6 @@ def test_simple_training():
         model_training_batch_callback(model, '洪七公脸如白纸', char_to_id_map, id_to_char_map, output_length=60)
 
     rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
-
-    logger.debug('input_ids_seqs=%s\ntype=%s', input_id_seqs, type(input_id_seqs))
 
     rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
         batch_size=batch_size, batch_callback=_model_batch_callback)
