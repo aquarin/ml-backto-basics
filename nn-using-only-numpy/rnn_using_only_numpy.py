@@ -196,9 +196,15 @@ class RnnWithNumpy:
     # Computes the gradient of loss function at one input in a sequence. Due to bptt calculation, the whole sequence computation states should be
     # provided. But only current time's label y needs to be provided.
     @staticmethod
-    def loss_gradient_u_v_w(current_time, forward_computation_intermediates_array, label_y_as_integer, dim_vocab, dim_hidden, bptt_truncation_len=10,
+    def loss_gradient_u_v_w(
+        current_time, forward_computation_intermediates_array, label_y_as_integer, dim_vocab, dim_hidden,
+        partial_state_partial_u_by_time_bptt_cache,
+        partial_state_partial_w_by_time_bptt_cache,
+        bptt_truncation_len=10,
         check_shapes=True):
         assert isinstance(current_time, int) and current_time >= 0 and current_time < len(forward_computation_intermediates_array)
+        assert isinstance(partial_state_partial_u_by_time_bptt_cache, dict)
+        assert isinstance(partial_state_partial_w_by_time_bptt_cache, dict)
 
         computed = forward_computation_intermediates_array[current_time]
 
@@ -260,7 +266,9 @@ class RnnWithNumpy:
         partial_state_partial_u = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_u(
             states_array_indexed_by_time=states_array_indexed_by_time,
             input_x_time_series=input_x_time_series, current_time=current_time, dim_hidden=dim_hidden,
-            dim_vocab=dim_vocab, matrix_w=matrix_w, matrix_u=matrix_u, truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False)
+            dim_vocab=dim_vocab, matrix_w=matrix_w, matrix_u=matrix_u,
+            partial_state_partial_u_by_time_cache=partial_state_partial_u_by_time_bptt_cache,
+            truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False)
 
         if check_shapes:
             # Why not (dim_hidden, dim_vocab, 1, dim_hidden) (a 2d matrix of column vectors)? Because I have messed up the transposition in somewhere.
@@ -278,7 +286,9 @@ class RnnWithNumpy:
 
         partial_state_partial_w = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             states_array_indexed_by_time=states_array_indexed_by_time, current_time=current_time,
-            dim_hidden=dim_hidden, matrix_w=matrix_w, truncation_len=bptt_truncation_len,
+            dim_hidden=dim_hidden, matrix_w=matrix_w,
+            partial_state_partial_w_by_time_cache=partial_state_partial_w_by_time_bptt_cache,
+            truncation_len=bptt_truncation_len,
             check_shapes=check_shapes, debug_output_dict=None, print_debug=False)
 
         partial_loss_partial_w = (np.zeros([dim_hidden, dim_hidden]) if np.isscalar(partial_state_partial_w) and partial_state_partial_w == 0
@@ -309,11 +319,16 @@ class RnnWithNumpy:
         partial_sequential_loss_partial_v = 0
         partial_sequential_loss_partial_w = 0
 
+        partial_state_partial_u_by_time_bptt_cache = {}
+        partial_state_partial_w_by_time_bptt_cache = {}
+
         for t in range(len(forward_computation_intermediates_array)):
             (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
                 current_time=t,
                 forward_computation_intermediates_array=forward_computation_intermediates_array,
                 label_y_as_integer=label_y_int_array[t], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+                partial_state_partial_u_by_time_bptt_cache=partial_state_partial_u_by_time_bptt_cache,
+                partial_state_partial_w_by_time_bptt_cache=partial_state_partial_w_by_time_bptt_cache,
                 check_shapes=check_shapes)
 
             partial_sequential_loss_partial_u += partial_loss_partial_u / float(len(forward_computation_intermediates_array))
@@ -326,14 +341,22 @@ class RnnWithNumpy:
     # Returns a Jacobian matrix of partial(state_vector@time_t) / partial(matrix_w)
     # See my notes, due to state_vector@time_t is a function of F(W, state_vector@time_t_minus_1), this will be calculated recursively.
     @staticmethod
-    def bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10,
+    def bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w,
+        partial_state_partial_w_by_time_cache,
+        truncation_len=10,
         check_shapes=True, debug_output_dict=None, print_debug=False):
+
+        assert isinstance(partial_state_partial_w_by_time_cache, dict)
+
         if truncation_len <= 0 or current_time <= 0:
             logger.debug('Returning 0 due to hitting truncation or current_time == 0, truncation_len=%d, current_time=%d'
                 % (truncation_len, current_time))
 
             # TODO: check if just a simple zero works, or should I need a size-aligned three dimensional zero matrix.
             return 0
+
+        if current_time in partial_state_partial_w_by_time_cache:
+            return partial_state_partial_w_by_time_cache[current_time]
 
         if check_shapes:
             assert matrix_w.shape == (dim_hidden, dim_hidden)
@@ -371,7 +394,9 @@ class RnnWithNumpy:
         partial_f_partial_param_2 = matrix_w
 
         partial_prev_state_partial_matrix_w = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
-            states_array_indexed_by_time, current_time - 1, dim_hidden, matrix_w, truncation_len - 1, check_shapes=check_shapes,
+            states_array_indexed_by_time, current_time - 1, dim_hidden, matrix_w,
+            partial_state_partial_w_by_time_cache=partial_state_partial_w_by_time_cache,
+            truncation_len=truncation_len - 1, check_shapes=check_shapes,
             debug_output_dict=None, print_debug=print_debug)
 
         partial_state_raw_partial_w = partial_f_partial_param_1 + (
@@ -400,14 +425,17 @@ class RnnWithNumpy:
             logger.debug('==================At current_time = %d:=================' % current_time)
             logger.debug(debug_output_dict)
 
+        partial_state_partial_w_by_time_cache[current_time] = partial_state_partial_w
         return partial_state_partial_w
 
 
     # See my notes how the recursive calculation of this one.
     @staticmethod
     def bptt_partial_state_time_t_partial_matrix_u(states_array_indexed_by_time, input_x_time_series, current_time, dim_hidden,
-        dim_vocab, matrix_w, matrix_u, truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False):
+        dim_vocab, matrix_w, matrix_u, partial_state_partial_u_by_time_cache,
+        truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False):
         assert len(input_x_time_series) == len(states_array_indexed_by_time)
+        assert isinstance(partial_state_partial_u_by_time_cache, dict)
 
         # Note that it's comparing current_time to -1, not 0 (like in the case of W). When t=0, /partial(matrix_u) still has value
         # , unlike the case of matrix W.
@@ -417,6 +445,9 @@ class RnnWithNumpy:
 
             # TODO: check if just a simple zero works, or should I need a size-aligned three dimensional zero matrix.
             return 0
+
+        if current_time in partial_state_partial_u_by_time_cache:
+            return partial_state_partial_u_by_time_cache[current_time]
 
         input_x_as_integer = input_x_time_series[current_time]
         current_state = states_array_indexed_by_time[current_time]
@@ -447,7 +478,8 @@ class RnnWithNumpy:
         # Finding its value recursively (bptt)
         partial_state_t_minus_1_partial_u = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_u(
             states_array_indexed_by_time, input_x_time_series, current_time - 1, dim_hidden,
-            dim_vocab, matrix_w, matrix_u, truncation_len=truncation_len - 1, check_shapes=check_shapes,
+            dim_vocab, matrix_w, matrix_u, partial_state_partial_u_by_time_cache=partial_state_partial_u_by_time_cache,
+            truncation_len=truncation_len - 1, check_shapes=check_shapes,
             debug_output_dict=debug_output_dict, print_debug=print_debug)
 
         w_mul_partial_state_minus_1_partial_u = (
@@ -467,6 +499,7 @@ class RnnWithNumpy:
             partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
         '''
 
+        partial_state_partial_u_by_time_cache[current_time] = partial_state_partial_matrix_u
         return partial_state_partial_matrix_u
 
 
