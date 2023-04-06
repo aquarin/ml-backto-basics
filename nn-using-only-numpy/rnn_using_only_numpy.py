@@ -33,6 +33,7 @@ class RnnWithNumpy:
 
         # No hidden state vector here as member variable. That will be held in each training/prediction's
         # own function call variables.
+        self.prev_state_vector = np.zeros(dim_hidden)
 
 
     @staticmethod
@@ -142,21 +143,23 @@ class RnnWithNumpy:
         return np.argmax(softmax_probabilities)
 
 
-    def forward_and_predict(self, input_x_as_integer, check_shapes=True):
+    def forward_and_predict_carry_state(self, input_x_as_integer, check_shapes=True):
         if check_shapes:
             assert isinstance(input_x_as_integer, int)
             assert input_x_as_integer >= 0 and input_x_as_integer < self.dim_vocab
 
         forward_computation_intermediates = self.forward(
             input_x_as_integer, self.dim_vocab, self.dim_hidden, self.matrix_u, self.matrix_w, self.matrix_v, self.prev_state_vector,
-            check_shapes=check_shapes, print_debug=print_debug)
+            check_shapes=check_shapes, print_debug=False)
 
-        (input_x_as_integer,
-            matrix_u, matrix_v, matrix_w, prev_state_vector,
-            matrix_u_times_x_onehot, w_times_prev_state, current_state_before_activation,
-            current_state, logits, softmax_probabilities) = forward_computation_intermediates
+        self.prev_state_vector = forward_computation_intermediates['current_state']
 
-        return self.predict_with_softmax_output(self.dim_vocab, softmax_probabilities, check_shapes=check_shapes, print_debug=print_debug)
+        return self.predict_with_softmax_output(
+            self.dim_vocab, softmax_probabilities['softmax_probabilities'], check_shapes=check_shapes, print_debug=False)
+
+
+    def reset_prev_state(self):
+        self.prev_state_vector = np.zeros(self.dim_hidden)
 
 
     def predict_sequence(self, input_x_int_sequence, check_shapes=True):
@@ -502,9 +505,42 @@ class RnnWithNumpy:
         self.matrix_w -= partial_loss_partial_w.shape * step_size
 
 
-    def train(x_input_int_list_of_sequences, y_label_int_list_of_sequences, output_loss_batch_size, callback_batch_size,
-        batch_callback):
-        raise NotImplementedError("Not here yet.")
+    def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, fixed_learning_rate, batch_size, batch_callback):
+        assert len(x_input_int_list_of_sequences) == len(y_label_int_list_of_sequences)
+        assert isinstance(batch_size, int)
 
+        batch_loss = 0
+        batch_processed_count = 0
+
+        for seq_index in range(len(x_input_int_list_of_sequences)):
+            input_x_int_sequence = x_input_int_list_of_sequences[seq_index]
+            y_label_int_sequence = y_label_int_list_of_sequences[seq_index]
+
+            assert np.ndim(input_x_int_sequence) == 1 and np.ndim(y_label_int_sequence) == 1
+
+            forward_computation_intermediates_array = self.forward_sequence(
+                input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+                matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+                start_state_vector=None, check_shapes=False, print_debug=False)
+
+            sequential_loss = self.sequence_loss_from_forward_computations(
+                dim_vocab=self.dim_vocab, forward_computation_intermediates_array=forward_computation_intermediates_array,
+                label_y_int_array=y_label_int_sequence, check_shapes=False)
+            batch_loss += sequential_loss
+
+            sequential_loss_gradient_uvw = (
+                self.sequence_loss_gradient_u_v_w(forward_computation_intermediates_array=forward_computation_intermediates_array,
+                    label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+                    bptt_truncation_len=10, check_shapes=False))
+
+            self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=fixed_learning_rate, check_shapes=True)
+
+            batch_processed_count += 1
+            if (seq_index + 1) % batch_size == 0:
+                logger.info("Processed %d total training samples. Last batch size = %d, last batch avg loss = %f. Calling callback...",
+                    seq_index + 1, batch_processed_count, batch_loss / batch_processed_count)
+
+                if batch_callback is not None:
+                    batch_callback(self)
 
 
