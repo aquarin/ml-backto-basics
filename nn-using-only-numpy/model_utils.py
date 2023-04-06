@@ -152,7 +152,7 @@ class ModelUtils:
     def generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
         logger.info("Generating Text...")
 
-        input_ids = char_array_to_id_array(prompt, char_to_id_map)
+        input_ids = ModelUtils.char_array_to_id_array(prompt, char_to_id_map)
         result_ids = input_ids.copy()
 
         model.reset_prev_state()
@@ -160,7 +160,8 @@ class ModelUtils:
             output_id = model.forward_and_predict_carry_state(result_ids[next_input_id_index])
             result_ids.append(output_id)
 
-        results = id_array_to_char_array(result_ids, id_to_char_map)
+        results = ModelUtils.id_array_to_char_array(result_ids, id_to_char_map)
+        results = ''.join(results)
         return results
 
 

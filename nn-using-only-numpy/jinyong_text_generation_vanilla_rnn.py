@@ -24,8 +24,11 @@ test_text = '''
 黄蓉吓得心中怦怦乱跳，寻思：“今日之险，又远过赵王府之时，看来只有自求了断，只是不手刃此獠，总不甘心。”翻手入怀，将郭靖那柄短剑与一把镀金钢针都拿在手里。欧阳克脸露微笑，脱下长衣当做兵器，又逼近了两步。黄蓉站着不动，待他又跨出一步，足底尚未着地之际，身子倏地向左横闪。欧阳克跟着过来，黄蓉左手空扬，见他挥起长衣抵挡钢针，身子已如箭离弦，急向洞外奔去。
 '''
 
+# Main training parameters
 dim_hidden = 64
 fixed_learning_rate = 0.0001
+sequence_length = 40
+batch_size = 30
 
 def save_model(model):
     filepath_template = './saved_numpy_models/model_%s.pkl'
@@ -37,10 +40,12 @@ def save_model(model):
 
 def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
     generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
+    logger.info("Generated text=%s", generated_text)
 
 
 def test_simple_training():
-    vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(test_text, 50)
+    vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
+        text=test_text, sequence_length=sequence_length)
     dim_vocab = len(vocab)
 
     def _model_batch_callback(model):
@@ -51,7 +56,7 @@ def test_simple_training():
     logger.debug('input_ids_seqs=%s\ntype=%s', input_id_seqs, type(input_id_seqs))
 
     rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
-        batch_size=1, batch_callback=_model_batch_callback)
+        batch_size=batch_size, batch_callback=_model_batch_callback)
 
 
 class TestNumpyRnnTextGeneration(unittest.TestCase):

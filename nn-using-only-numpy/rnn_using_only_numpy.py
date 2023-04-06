@@ -1,5 +1,6 @@
 import logging
 import math
+import numbers
 import numpy as np
 import pickle
 
@@ -40,7 +41,7 @@ class RnnWithNumpy:
     def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w, prev_state_vector,
         check_shapes=True, print_debug=False):
         if check_shapes:
-            assert isinstance(input_x_as_integer, int)
+            assert isinstance(input_x_as_integer, numbers.Integral)
             assert matrix_u.ndim == 2
             assert matrix_v.ndim == 2
             assert matrix_w.ndim == 2
@@ -145,17 +146,19 @@ class RnnWithNumpy:
 
     def forward_and_predict_carry_state(self, input_x_as_integer, check_shapes=True):
         if check_shapes:
-            assert isinstance(input_x_as_integer, int)
+            assert isinstance(input_x_as_integer, numbers.Integral)
             assert input_x_as_integer >= 0 and input_x_as_integer < self.dim_vocab
 
         forward_computation_intermediates = self.forward(
-            input_x_as_integer, self.dim_vocab, self.dim_hidden, self.matrix_u, self.matrix_w, self.matrix_v, self.prev_state_vector,
+            input_x_as_integer, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+            matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+            prev_state_vector=self.prev_state_vector,
             check_shapes=check_shapes, print_debug=False)
 
         self.prev_state_vector = forward_computation_intermediates['current_state']
 
         return self.predict_with_softmax_output(
-            self.dim_vocab, softmax_probabilities['softmax_probabilities'], check_shapes=check_shapes, print_debug=False)
+            self.dim_vocab, forward_computation_intermediates['softmax_probabilities'], check_shapes=check_shapes, print_debug=False)
 
 
     def reset_prev_state(self):
@@ -349,10 +352,7 @@ class RnnWithNumpy:
         assert isinstance(partial_state_partial_w_by_time_cache, dict)
 
         if truncation_len <= 0 or current_time <= 0:
-            logger.debug('Returning 0 due to hitting truncation or current_time == 0, truncation_len=%d, current_time=%d'
-                % (truncation_len, current_time))
-
-            # TODO: check if just a simple zero works, or should I need a size-aligned three dimensional zero matrix.
+            # The down-stream code will handle this 0, so that I wouldn't need to return a shape-aligned zero matrix.
             return 0
 
         if current_time in partial_state_partial_w_by_time_cache:
@@ -440,10 +440,7 @@ class RnnWithNumpy:
         # Note that it's comparing current_time to -1, not 0 (like in the case of W). When t=0, /partial(matrix_u) still has value
         # , unlike the case of matrix W.
         if truncation_len <= 0 or current_time <= -1:
-            logger.debug('Returning 0 due to hitting truncation or current_time == 0, truncation_len=%d, current_time=%d'
-                % (truncation_len, current_time))
-
-            # TODO: check if just a simple zero works, or should I need a size-aligned three dimensional zero matrix.
+            # The down-stream code will handle this 0, so that I wouldn't need to return a shape-aligned zero matrix.
             return 0
 
         if current_time in partial_state_partial_u_by_time_cache:
@@ -553,5 +550,8 @@ class RnnWithNumpy:
 
                 if batch_callback is not None:
                     batch_callback(self)
+
+                batch_loss = 0
+                batch_processed_count = 0
 
 
