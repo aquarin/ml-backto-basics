@@ -262,9 +262,6 @@ class RnnWithNumpy:
             input_x_time_series=input_x_time_series, current_time=current_time, dim_hidden=dim_hidden,
             dim_vocab=dim_vocab, matrix_w=matrix_w, matrix_u=matrix_u, truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False)
 
-        logger.debug('#### step=%d, partial_loss_partial_new_state=\n%s\n, shape=%s\n partial_state_partial_u=\n%s\nshape=%s',
-            current_time, partial_loss_partial_new_state, np.shape(partial_loss_partial_new_state),
-            partial_state_partial_u, np.shape(partial_state_partial_u))
         if check_shapes:
             # Why not (dim_hidden, dim_vocab, 1, dim_hidden) (a 2d matrix of column vectors)? Because I have messed up the transposition in somewhere.
             assert partial_state_partial_u.shape == (dim_hidden, dim_vocab, dim_hidden)
@@ -272,8 +269,6 @@ class RnnWithNumpy:
         # Frankly, I don't totally understand the mechanism behind "i,ijkl->il". I want to do a multiplication between a row vector and a 3d matrix.
         # I just figured this out by trial and error. Probably I should learn why this worked, when I have more time.
         partial_loss_partial_u = np.einsum('k,ijk->ij', partial_loss_partial_new_state, partial_state_partial_u)
-        logger.debug('#### step=%d, partial_state_partial_u=\n%s\n, partial_loss_partial_u=\n%s\n,shape=%s',
-            current_time, partial_state_partial_u, partial_loss_partial_u, np.shape(partial_loss_partial_u))
 
         if check_shapes:
             assert partial_loss_partial_u.shape == matrix_u.shape
@@ -284,7 +279,7 @@ class RnnWithNumpy:
         partial_state_partial_w = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             states_array_indexed_by_time=states_array_indexed_by_time, current_time=current_time,
             dim_hidden=dim_hidden, matrix_w=matrix_w, truncation_len=bptt_truncation_len,
-            check_shapes=check_shapes, debug_output_dict=None, print_debug=True)
+            check_shapes=check_shapes, debug_output_dict=None, print_debug=False)
 
         partial_loss_partial_w = (np.zeros([dim_hidden, dim_hidden]) if np.isscalar(partial_state_partial_w) and partial_state_partial_w == 0
             else np.matmul(partial_loss_partial_new_state, partial_state_partial_w))
@@ -322,7 +317,6 @@ class RnnWithNumpy:
                 check_shapes=check_shapes)
 
             partial_sequential_loss_partial_u += partial_loss_partial_u / float(len(forward_computation_intermediates_array))
-            logger.debug('step=%d, single step partial_loss_partial_u=%s', t, partial_loss_partial_u)
             partial_sequential_loss_partial_v += partial_loss_partial_v / float(len(forward_computation_intermediates_array))
             partial_sequential_loss_partial_w += partial_loss_partial_w / float(len(forward_computation_intermediates_array))
 
@@ -442,8 +436,6 @@ class RnnWithNumpy:
         x_onehot = np.zeros(dim_vocab).reshape(-1, 1)
         x_onehot[input_x_as_integer] = 1.0
 
-        logger.debug('x_onehot=\n%s\nshape=%s', x_onehot, np.shape(x_onehot))
-
         # Can't do this with kronecker product or einsum(). Looked online, asked ChatGPT, answers were wrong.
         # E.g. this doesn't work: partial_u_times_x_onehot_partial_u = np.einsum('ij,kl->ijl', np.eye(dim_hidden, dim_hidden), x_onehot)
         # And this is wrong: partial(M*v)/partial(M) = kron(eye(), v.T)
@@ -452,17 +444,11 @@ class RnnWithNumpy:
         for i in range(dim_hidden):
             partial_u_times_x_onehot_partial_u[i][input_x_as_integer][i] = 1.0
 
-        logger.debug('### partial_u_times_x_onehot_partial_u=\n%s\n, shape=%s',
-            partial_u_times_x_onehot_partial_u, partial_u_times_x_onehot_partial_u.shape)
-
         # Finding its value recursively (bptt)
         partial_state_t_minus_1_partial_u = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_u(
             states_array_indexed_by_time, input_x_time_series, current_time - 1, dim_hidden,
             dim_vocab, matrix_w, matrix_u, truncation_len=truncation_len - 1, check_shapes=check_shapes,
             debug_output_dict=debug_output_dict, print_debug=print_debug)
-        logger.debug('### current_time=%d, partial_state_t_minus_1_partial_u=\n%s\n, shape=%s',
-            current_time,
-            partial_state_t_minus_1_partial_u, np.shape(partial_state_t_minus_1_partial_u))
 
         w_mul_partial_state_minus_1_partial_u = (
             0 if (np.isscalar(partial_state_t_minus_1_partial_u) and partial_state_t_minus_1_partial_u == 0)
@@ -472,15 +458,6 @@ class RnnWithNumpy:
             else np.einsum('ij,jkl->ikl', matrix_w.T, partial_state_t_minus_1_partial_u))
 
         # assert np.sahpe(w_mul_partial_state_minus_1_partial_u.shape) in ((), ())
-
-        logger.debug('### w_mul_partial_state_minus_1_partial_u=\n%s\n',
-            w_mul_partial_state_minus_1_partial_u)
-        logger.debug('### partial_state_partial_raw_state=\n%s\n, shape=%s',
-            partial_state_partial_raw_state, partial_state_partial_raw_state.shape)
-
-        temp = partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u
-        logger.debug('### partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u=\n%s\n, shape=%s',
-            temp, temp.shape)
         partial_state_partial_matrix_u = np.einsum('ij,jkl->ikl', 
             partial_state_partial_raw_state,
             partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
@@ -500,9 +477,9 @@ class RnnWithNumpy:
             assert partial_loss_partial_v.shape == self.matrix_v.shape
             assert partial_loss_partial_w.shape == self.matrix_w.shape
 
-        self.matrix_u -= partial_loss_partial_u.shape * step_size
-        self.matrix_v -= partial_loss_partial_v.shape * step_size
-        self.matrix_w -= partial_loss_partial_w.shape * step_size
+        self.matrix_u -= partial_loss_partial_u * step_size
+        self.matrix_v -= partial_loss_partial_v * step_size
+        self.matrix_w -= partial_loss_partial_w * step_size
 
 
     def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, fixed_learning_rate, batch_size, batch_callback):
@@ -513,6 +490,7 @@ class RnnWithNumpy:
         batch_processed_count = 0
 
         for seq_index in range(len(x_input_int_list_of_sequences)):
+            logger.info("Training one sample...")
             input_x_int_sequence = x_input_int_list_of_sequences[seq_index]
             y_label_int_sequence = y_label_int_list_of_sequences[seq_index]
 

@@ -576,8 +576,35 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             logits = np.matmul(model.matrix_v, state)
             logger.info('step %d: state=%s, logits=%s, predicted_id=%d', index, state, logits, predicted_ids[index])
             np.testing.assert_equal(logits[predicted_ids[index]], np.max(logits))
-            
+
             prev_state = state
+
+
+    def test_step_parameters(self):
+        dim_hidden = 3
+        dim_vocab = 4
+        model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
+        model.matrix_u = self.prediction_test_params['matrix_u']
+        model.matrix_v = self.prediction_test_params['matrix_v']
+        model.matrix_w = self.prediction_test_params['matrix_w']
+        state_vector_time_negative_1 = np.zeros(dim_hidden)
+
+        input_id_seq = [0, 1, 2, 3, 0, 1, 2, 3]
+        expected_output_seq = [2, 2, 2, 2, 2, 2, 2, 2]
+
+        forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
+            input_x_int_array=input_id_seq, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            matrix_u=model.matrix_u, matrix_v=model.matrix_v, matrix_w=model.matrix_w,
+            start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
+
+        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.sequence_loss_gradient_u_v_w(
+            forward_computation_intermediates_array=forward_computation_intermediates_array,
+            label_y_int_array=expected_output_seq, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+            bptt_truncation_len=10, check_shapes=True)
+
+
+        model.step_parameters((partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w),
+            step_size=1e-5, check_shapes=True)
 
 
 if __name__ == '__main__':
