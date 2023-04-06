@@ -1,3 +1,14 @@
+'''
+Implementing RNN with only numpy, not using any other frameworks (such as PyTorch or Tensorflow)
+
+Purpose of doing this:
+  * Help myself go back to the ML basics and get better understanding, rather than using wrapped libraries.
+  * Using this code to clearly explain what happens in an RNN to help others.
+  * Performance optimization is not a goal, code clarity is more important.
+
+  NOTES: there is no bias term in this model. Probably I should add bias some time later.
+'''
+
 import logging
 import math
 import numbers
@@ -8,16 +19,6 @@ from computational_utils import Utilities
 
 logger = logging.getLogger(__name__)
 
-'''
-Implementing RNN with only numpy, not using any other frameworks (such as PyTorch or Tensorflow)
-
-Purpose of doing this:
-  * Help myself go back to the ML basics and get better understanding, rather than using wrapped libraries.
-  * Using this code to clearly explain what happens in an RNN to help others.
-  * Performance optimization is not a goal, code clarity is more important.
-
-  NOTES: there is no bias term here. Probably I should add bias some time later.
-'''
 class RnnWithNumpy:
     def __init__(self, dim_vocab, dim_hidden):
         self.dim_vocab = dim_vocab
@@ -500,6 +501,7 @@ class RnnWithNumpy:
         return partial_state_partial_matrix_u
 
 
+    # Only the very very primitive SGD. Not even having adapting learning rate. Should improve this later.
     def step_parameters(self, loss_gradient_u_v_w, step_size, check_shapes=True):
         (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = loss_gradient_u_v_w
         if check_shapes:
@@ -512,46 +514,54 @@ class RnnWithNumpy:
         self.matrix_w -= partial_loss_partial_w * step_size
 
 
-    def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, fixed_learning_rate, batch_size, batch_callback):
+    def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, fixed_learning_rate,
+        batch_size, max_epoch, batch_callback):
         assert len(x_input_int_list_of_sequences) == len(y_label_int_list_of_sequences)
         assert isinstance(batch_size, int)
 
         batch_loss = 0
         batch_processed_count = 0
+        trained_count = 0
+        epoch_count = 0
 
-        for seq_index in range(len(x_input_int_list_of_sequences)):
-            logger.info("Training one sample...")
-            input_x_int_sequence = x_input_int_list_of_sequences[seq_index]
-            y_label_int_sequence = y_label_int_list_of_sequences[seq_index]
+        while epoch_count < max_epoch:
+            for seq_index in range(len(x_input_int_list_of_sequences)):
+                logger.info("Training one sample...")
+                input_x_int_sequence = x_input_int_list_of_sequences[seq_index]
+                y_label_int_sequence = y_label_int_list_of_sequences[seq_index]
 
-            assert np.ndim(input_x_int_sequence) == 1 and np.ndim(y_label_int_sequence) == 1
+                assert np.ndim(input_x_int_sequence) == 1 and np.ndim(y_label_int_sequence) == 1
 
-            forward_computation_intermediates_array = self.forward_sequence(
-                input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
-                matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
-                start_state_vector=None, check_shapes=False, print_debug=False)
+                forward_computation_intermediates_array = self.forward_sequence(
+                    input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+                    matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+                    start_state_vector=None, check_shapes=False, print_debug=False)
 
-            sequential_loss = self.sequence_loss_from_forward_computations(
-                dim_vocab=self.dim_vocab, forward_computation_intermediates_array=forward_computation_intermediates_array,
-                label_y_int_array=y_label_int_sequence, check_shapes=False)
-            batch_loss += sequential_loss
+                sequential_loss = self.sequence_loss_from_forward_computations(
+                    dim_vocab=self.dim_vocab, forward_computation_intermediates_array=forward_computation_intermediates_array,
+                    label_y_int_array=y_label_int_sequence, check_shapes=False)
+                batch_loss += sequential_loss
 
-            sequential_loss_gradient_uvw = (
-                self.sequence_loss_gradient_u_v_w(forward_computation_intermediates_array=forward_computation_intermediates_array,
-                    label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
-                    bptt_truncation_len=10, check_shapes=False))
+                sequential_loss_gradient_uvw = (
+                    self.sequence_loss_gradient_u_v_w(forward_computation_intermediates_array=forward_computation_intermediates_array,
+                        label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+                        bptt_truncation_len=10, check_shapes=False))
 
-            self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=fixed_learning_rate, check_shapes=True)
+                self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=fixed_learning_rate, check_shapes=True)
 
-            batch_processed_count += 1
-            if (seq_index + 1) % batch_size == 0:
-                logger.info("Processed %d total training samples. Last batch size = %d, last batch avg loss = %f. Calling callback...",
-                    seq_index + 1, batch_processed_count, batch_loss / batch_processed_count)
+                batch_processed_count += 1
+                trained_count += 1
 
-                if batch_callback is not None:
-                    batch_callback(self)
+                if (seq_index + 1) % batch_size == 0:
+                    logger.info("Processed %d total training samples. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
+                        trained_count, epoch_count, max_epoch, batch_processed_count, batch_loss / batch_processed_count)
 
-                batch_loss = 0
-                batch_processed_count = 0
+                    if batch_callback is not None:
+                        batch_callback(self)
+
+                    batch_loss = 0
+                    batch_processed_count = 0
+
+            epoch_count += 1
 
 

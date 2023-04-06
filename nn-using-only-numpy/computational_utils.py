@@ -1,3 +1,11 @@
+'''
+This file contains some utility methods to help the mathematical calculations for RNN or other Neural Networks.
+
+It also contained some unused derivative computations, such as loss_from_logits_derivative_wrt_logits().
+Those were not used in the actual RNN model computations, but used for the theoretical verificaitons,
+as tested in derivative_verifier.py
+'''
+
 import math
 import numpy as np
 import logging
@@ -8,11 +16,6 @@ import sys
 import os
 
 import warnings
-
-# To suppress warning in backwardPreAllocated(), np.dot(W.T, dz, out=pre_allocated_dx). I did use ndarrays, but still a
-# "the matrix subclass is not the recommended way to represent matrices or deal with linear algebra" warning came.
-warnings.filterwarnings("ignore",category=PendingDeprecationWarning)
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -1,3 +1,10 @@
+'''
+This file contains unit tests against the components within class RnnWithNumpy.
+The forward propagations are verified by recomputing.
+The backward propagation (gradients calculations), especially the BPTT, are verified by comparing the results to the numerical derivatives
+    of the loss function, with respect to difference paramter matrices.
+'''
+
 import logging
 import math
 import random

@@ -1,3 +1,7 @@
+'''
+A utilities class to help verifying my theoretical derivatives, by comparing them to the numerical derivatives.
+This is helpful in checking my correctness in calculating backpropagation of neural networks.
+'''
 import logging
 import math
 import random
@@ -10,9 +14,6 @@ from computational_utils import Utilities
 
 logger = logging.getLogger(__name__)
 
-'''
-Verifies the derivative.
-'''
 class DerivativeVerifier:
     '''
     Tested, x_0, delta_x can both be matrices, and func can be a function of matrix to a scalar

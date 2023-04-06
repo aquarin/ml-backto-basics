@@ -1,3 +1,8 @@
+'''
+A Utility class to do the peripheral jobs supporting the machine learnings works,
+such as training data preparation, character/id mapping, sequence prediction.
+'''
+
 import datetime
 import logging
 import math
@@ -8,15 +13,10 @@ import time
 
 import rnn_using_only_numpy
 
-training_data_file_path = './shakespeare.txt'
+
 logger = logging.getLogger(__name__)
-sequence_length = 60
-hidden_dim = 256
 
 
-'''
-This util class handles the data processing, etc.
-'''
 class ModelUtils:
     @staticmethod
     def prepare_data(filepath, sequence_length, truncation=-1):
@@ -50,7 +50,6 @@ class ModelUtils:
         vocab = sorted(set(text))
         char_to_id_map, id_to_char_map = ModelUtils.build_dict(vocab)
         vocab = sorted(set(char_to_id_map.keys()))
-        logger.info(f'{len(vocab)} unique characters')
 
         logger.info('Started converting creating input/label sequences.')
         input_seqs, label_seqs = ModelUtils.text_to_list_of_sequences_split(text, sequence_length)
@@ -58,7 +57,8 @@ class ModelUtils:
         input_id_seqs = ModelUtils.string_sequences_to_id_sequences(input_seqs, char_to_id_map)
         label_id_seqs = ModelUtils.string_sequences_to_id_sequences(label_seqs, char_to_id_map)
 
-        logger.info('Done converting creating input/label sequences.')
+        logger.info('Done converting creating input/label sequences. Training sample size=%d, vocab size=%d',
+            len(input_id_seqs), len(vocab))
 
         return vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs
 
@@ -184,31 +184,3 @@ class ModelUtils:
 
         return shuffled_input_id_seqs, shuffled_label_id_seqs
 
-
-    def main():
-        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = prepare_data(
-            training_data_file_path, sequence_length, truncation=-1)
-
-        rnn_model = rnn_using_only_np.Model(len(id_to_char_map), hidden_dim, debug_output=False)
-
-        shuffled_input_ids, shuffled_label_ids = shuffle_training_data(input_id_seqs, label_id_seqs)
-
-        rnn_model = rnn_using_only_np.Model(len(id_to_char_map), hidden_dim, debug_output=False)
-
-        def _training_batch_callback():
-            save_model(rnn_model)
-            generated_text = ''.join(generate_text(rnn_model, u'Romeo ', char_to_id_map, id_to_char_map, output_length=200))
-            logger.info('generated_text=' + generated_text)
-            save_model(rnn_model)
-
-        logger.info('Generated text before any training:')
-        _training_batch_callback()
-
-        rnn_model.train(shuffled_input_ids, shuffled_label_ids, nepoch=50,
-            batch_size=5000, callback_per_batch=_training_batch_callback)
-
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    main()
