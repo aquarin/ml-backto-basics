@@ -34,6 +34,24 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         'delta_x_scalar': 1e-5
     }
 
+    prediction_test_params = {
+        'matrix_u': np.array([
+            [.5, 0, 0, 0],
+            [0, .5, 0, .2],
+            [0, 0, .5, .2],
+        ]),
+        # Sorted of wanted: embedding first element to be emphasized into second id,
+        # embedding second to third id, and no one cared about the fourth id
+        'matrix_v': np.array([
+            [.2, .2, .8],
+            [.8, .2, .2],
+            [.2, .8, .2],
+            [.2, .3, .3],
+        ]),
+        # Sorted of wanted: previous state "equally" carried to the next state.
+        'matrix_w': np.eye(3),
+    }
+
     # A simplified forward process just to verify the bptt. In this forwarding, there is no logits, softmax, matrix V, involved.
     @staticmethod
     def forward_with_only_state_vector(dim_hidden, dim_vocab, state_vector_time_negative_1, matrix_w, matrix_u, input_x_integers_by_time):
@@ -539,6 +557,27 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
 
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
             input_x_integers_by_time, label_y_int_array)
+
+
+    def test_predict_sequence(self):
+        model = RnnWithNumpy(dim_vocab=4, dim_hidden=3)
+        model.matrix_u = self.prediction_test_params['matrix_u']
+        model.matrix_v = self.prediction_test_params['matrix_v']
+        model.matrix_w = self.prediction_test_params['matrix_w']
+
+        input_id_seq = [0, 1, 2, 3, 0, 1, 2, 3]
+        predicted_ids = model.predict_sequence(input_x_int_sequence=input_id_seq, check_shapes=True)
+        logger.info('input ids=%s', input_id_seq)
+        logger.info('predicted_ids=%s', predicted_ids)
+
+        prev_state = np.zeros(3)
+        for index, input_x_int in enumerate(input_id_seq):
+            state = np.tanh(model.matrix_u[:, input_x_int] + np.matmul(model.matrix_w, prev_state))
+            logits = np.matmul(model.matrix_v, state)
+            logger.info('step %d: state=%s, logits=%s, predicted_id=%d', index, state, logits, predicted_ids[index])
+            np.testing.assert_equal(logits[predicted_ids[index]], np.max(logits))
+            
+            prev_state = state
 
 
 if __name__ == '__main__':

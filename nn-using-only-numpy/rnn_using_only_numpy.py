@@ -23,15 +23,16 @@ class RnnWithNumpy:
         self.dim_hidden = dim_hidden
 
         # Matrix U is the one that transforms input one-hot vector into its embedding.
-        self.matrix_u = np.random.uniform(-1, 1, dim_hidden * dim_vocab).reshape(dim_hidden, dim_vocab)
+        self.matrix_u = np.random.uniform(-.8, .8, dim_hidden * dim_vocab).reshape(dim_hidden, dim_vocab)
 
         # Transforms post-activation (tanh) state into logits (output embedding)
-        self.matrix_v = np.random.uniform(-1, 1, dim_hidden * dim_vocab).reshape(dim_vocab, dim_hidden)
+        self.matrix_v = np.random.uniform(-.8, .8, dim_hidden * dim_vocab).reshape(dim_vocab, dim_hidden)
 
         # Transforms previous state (s[t-1]) into part of next state, before activation.
-        self.matrix_w = np.random.uniform(-1, 1, dim_hidden * dim_hidden).reshape(dim_hidden, dim_hidden)
+        self.matrix_w = np.random.uniform(-.8, .8, dim_hidden * dim_hidden).reshape(dim_hidden, dim_hidden)
 
-        self.prev_state_vector = np.zeros(dim_hidden)
+        # No hidden state vector here as member variable. That will be held in each training/prediction's
+        # own function call variables.
 
 
     @staticmethod
@@ -80,6 +81,8 @@ class RnnWithNumpy:
     @staticmethod
     def forward_sequence(input_x_int_array, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w,
         start_state_vector=None, check_shapes=True, print_debug=False):
+        prev_state_vector = start_state_vector if start_state_vector is not None else np.zeros(dim_hidden)
+
         if check_shapes:
             assert matrix_u.ndim == 2
             assert matrix_v.ndim == 2
@@ -87,11 +90,10 @@ class RnnWithNumpy:
             assert matrix_u.shape[0] == dim_hidden and matrix_u.shape[1] == dim_vocab
             assert matrix_v.shape[0] == dim_vocab and matrix_v.shape[1] == dim_hidden
             assert matrix_w.shape[0] == matrix_w.shape[1] == dim_hidden
-            assert start_state_vector.ndim == 1
-            assert start_state_vector.size == dim_hidden
+            assert prev_state_vector.ndim == 1
+            assert prev_state_vector.size == dim_hidden
 
         forward_computation_intermediates_array = []
-        prev_state_vector = start_state_vector if start_state_vector is None else np.zeros(dim_hidden)
 
         for input_x_as_integer in input_x_int_array:
             if check_shapes:
@@ -155,6 +157,26 @@ class RnnWithNumpy:
             current_state, logits, softmax_probabilities) = forward_computation_intermediates
 
         return self.predict_with_softmax_output(self.dim_vocab, softmax_probabilities, check_shapes=check_shapes, print_debug=print_debug)
+
+
+    def predict_sequence(self, input_x_int_sequence, check_shapes=True):
+        if check_shapes:
+            assert np.ndim(input_x_int_sequence) == 1
+
+        forward_computation_intermediates_array = self.forward_sequence(
+            input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+            matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+            start_state_vector=None, check_shapes=check_shapes, print_debug=False)
+
+        probabilities_time_series = list(map(lambda computed: computed['softmax_probabilities'], forward_computation_intermediates_array))
+
+        result_ids = []
+        for probabilities in probabilities_time_series:
+            predicted_id = self.predict_with_softmax_output(dim_vocab=self.dim_vocab, softmax_probabilities=probabilities, check_shapes=check_shapes,
+                print_debug=False)
+            result_ids.append(predicted_id)
+
+        return result_ids
 
 
     @staticmethod
@@ -479,6 +501,10 @@ class RnnWithNumpy:
         self.matrix_v -= partial_loss_partial_v.shape * step_size
         self.matrix_w -= partial_loss_partial_w.shape * step_size
 
+
+    def train(x_input_int_list_of_sequences, y_label_int_list_of_sequences, output_loss_batch_size, callback_batch_size,
+        batch_callback):
+        raise NotImplementedError("Not here yet.")
 
 
 
