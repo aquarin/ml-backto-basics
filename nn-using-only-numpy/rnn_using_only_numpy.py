@@ -16,6 +16,7 @@ import numpy as np
 import pickle
 
 from computational_utils import Utilities
+from adam_optimizer import AdamOptimizer
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,10 @@ class RnnWithNumpy:
         # No hidden state vector here as member variable. That will be held in each training/prediction's
         # own function call variables.
         self.prev_state_vector = np.zeros(dim_hidden)
+
+        self.adam_optimizer_u = AdamOptimizer()
+        self.adam_optimizer_v = AdamOptimizer()
+        self.adam_optimizer_w = AdamOptimizer()
 
 
     @staticmethod
@@ -502,6 +507,7 @@ class RnnWithNumpy:
 
 
     # Only the very very primitive SGD. Not even having adapting learning rate. Should improve this later.
+    # Step size is not used for now. Only relying on adam optimizer.
     def step_parameters(self, loss_gradient_u_v_w, step_size, check_shapes=True):
         (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = loss_gradient_u_v_w
         if check_shapes:
@@ -509,9 +515,13 @@ class RnnWithNumpy:
             assert partial_loss_partial_v.shape == self.matrix_v.shape
             assert partial_loss_partial_w.shape == self.matrix_w.shape
 
-        self.matrix_u -= partial_loss_partial_u * step_size
-        self.matrix_v -= partial_loss_partial_v * step_size
-        self.matrix_w -= partial_loss_partial_w * step_size
+        suggested_delta_u = self.adam_optimizer_u.suggest_delta_x_from_graident(partial_loss_partial_u)
+        suggested_delta_v = self.adam_optimizer_v.suggest_delta_x_from_graident(partial_loss_partial_v)
+        suggested_delta_w = self.adam_optimizer_w.suggest_delta_x_from_graident(partial_loss_partial_w)
+
+        self.matrix_u += suggested_delta_u
+        self.matrix_v += suggested_delta_v
+        self.matrix_w += suggested_delta_w
 
 
     def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, fixed_learning_rate,

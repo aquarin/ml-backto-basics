@@ -19,9 +19,15 @@ logger = logging.getLogger(__name__)
 dim_hidden = 64
 fixed_learning_rate = 0.004
 sequence_length = 25
-batch_size = 10
-max_epoch = 30
-text_generation_prompt = 'ROMEO ROMEO '
+batch_size = 1
+max_epoch = 3000
+text_generation_prompt = 'ROMEO:'
+text_file = './training_data/shakespeare.txt'
+
+shorted_text = (
+'''
+ROMEO:
+Is the day so young?''')
 
 def save_model(model):
     filepath_template = './saved_numpy_models/model_%s.pkl'
@@ -39,7 +45,7 @@ def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map,
 
 def test_simple_training():
     vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
-        filepath='./training_data/shakespeare.txt', sequence_length=sequence_length)
+        filepath=text_file, sequence_length=sequence_length)
     dim_vocab = len(vocab)
 
     def _model_batch_callback(model):
@@ -58,6 +64,67 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
     def test_simple_training(self):
         test_simple_training()
+
+
+
+    def test_with_very_short_training_data(self):
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
+            text=shorted_text, sequence_length=sequence_length)
+
+        dim_vocab = len(vocab)
+
+        def _model_batch_callback(model):
+            model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
+
+        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
+
+        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
+            dim_vocab, dim_hidden, sequence_length, fixed_learning_rate)
+
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
+            batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+
+
+    def test_continue_with_previous_model_short_training_data(self):
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
+            text=shorted_text, sequence_length=sequence_length)
+        dim_vocab = len(vocab)
+
+        filepath = './saved_numpy_models/model_2023_04_07_19_28_21.pkl'
+
+        with open(filepath, 'rb') as file:
+            rnn_model = pickle.load(file)
+
+        def _model_batch_callback(model):
+            model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
+
+        learning_rate = 0.02
+        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
+            dim_vocab, dim_hidden, sequence_length, learning_rate)
+
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=0.001,
+            batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+
+
+    def test_continue_with_previous_model(self):
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
+            filepath=text_file, sequence_length=sequence_length)
+        dim_vocab = len(vocab)
+
+        filepath = './saved_numpy_models/model_2023_04_07_14_12_13.pkl'
+
+        with open(filepath, 'rb') as file:
+            rnn_model = pickle.load(file)
+
+        def _model_batch_callback(model):
+            model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
+
+        learning_rate = 0.001
+        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
+            dim_vocab, dim_hidden, sequence_length, learning_rate)
+
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=0.001,
+            batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
     def profile_simple_training(self):
         # Creating profile object

@@ -25,12 +25,13 @@ class AdamOptimizer:
 
     def suggest_delta_x_from_graident(self, gradient):
         self.iteration += 1
+
         self.m = self.beta1 * self.m + (1 - self.beta1) * gradient  # update first moment estimate
         self.v = self.beta2 * self.v + (1 - self.beta2) * gradient ** 2  # update second moment estimate
         m_hat = self.m / (1 - self.beta1 ** self.iteration)  # correct bias in first moment estimate
         v_hat = self.v / (1 - self.beta2 ** self.iteration)  # correct bias in second moment estimate
-
         delta_x = - self.alpha * m_hat / (v_hat ** .5 + self.epsilon)  # update the parameter
+
 
         return delta_x
 
@@ -58,6 +59,8 @@ class AdamOptizerTest(unittest.TestCase):
             logger.debug("Step %d, gradient=\n%s\n, adam suggested delta_x=\n%s\n, new x0=\n%s\n" +
                 " f(x0)=\n%s\n",
                 step, gradient, delta_x, x0, _f(x0))
+
+        np.testing.assert_almost_equal(_f(x0), 0, 5)
 
 
 if __name__ == '__main__':
