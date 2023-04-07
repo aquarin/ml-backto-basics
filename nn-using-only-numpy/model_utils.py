@@ -152,12 +152,18 @@ class ModelUtils:
     def generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
         logger.info("Generating Text...")
 
-        input_ids = ModelUtils.char_array_to_id_array(prompt, char_to_id_map)
-        result_ids = input_ids.copy()
+        prompt_input_ids = ModelUtils.char_array_to_id_array(prompt, char_to_id_map)
+        result_ids = prompt_input_ids.copy()
 
         model.reset_prev_state()
-        for next_input_id_index in range(output_length):
-            output_id = model.forward_and_predict_carry_state(result_ids[next_input_id_index])
+
+        for input_id in prompt_input_ids:
+            output_id = model.forward_and_predict_carry_state(input_id)
+            # Discard all output_ids except the last one.
+
+        result_ids.append(output_id)
+        for i in range(output_length):
+            output_id = model.forward_and_predict_carry_state(output_id)
             result_ids.append(output_id)
 
         results = ModelUtils.id_array_to_char_array(result_ids, id_to_char_map)
