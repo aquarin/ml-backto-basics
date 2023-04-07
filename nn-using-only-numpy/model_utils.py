@@ -25,7 +25,7 @@ class ModelUtils:
         text = text.decode('utf-8')
         text = text[:truncation]
 
-        return prepare_data_from_text(text, sequence_length)
+        return ModelUtils.prepare_data_from_text(text, sequence_length)
 
 
     @staticmethod

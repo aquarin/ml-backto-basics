@@ -39,9 +39,9 @@ test_text = '''
 '''
 
 # Main training parameters
-dim_hidden = 64
+dim_hidden = 128
 fixed_learning_rate = 0.004
-sequence_length = 40
+sequence_length = 25
 batch_size = 10
 max_epoch=20
 
