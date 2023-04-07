@@ -32,7 +32,6 @@ class AdamOptimizer:
         v_hat = self.v / (1 - self.beta2 ** self.iteration)  # correct bias in second moment estimate
         delta_x = - self.alpha * m_hat / (v_hat ** .5 + self.epsilon)  # update the parameter
 
-
         return delta_x
 
 
@@ -47,7 +46,6 @@ class AdamOptizerTest(unittest.TestCase):
             [-10.0, -2],
             [4, 20],
         ])
-
 
         for step in range(1000):
             gradient = DerivativeVerifier.numerical_jacobian_diff_matrix(
