@@ -14,6 +14,7 @@ import math
 import numbers
 import numpy as np
 import pickle
+import time
 
 from computational_utils import Utilities
 from adam_optimizer import AdamOptimizer
@@ -527,6 +528,18 @@ class RnnWithNumpy:
         batch_processed_count = 0
         trained_count = 0
         epoch_count = 0
+        start_time = time.time()
+
+        def _print_loss_and_do_callback():
+            nonlocal batch_loss, batch_processed_count, trained_count, epoch_count, start_time
+            logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
+                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_loss / batch_processed_count)
+
+            if batch_callback is not None:
+                batch_callback(self)
+
+            batch_loss = 0
+            batch_processed_count = 0
 
         while epoch_count < max_epoch:
             for seq_index in range(len(x_input_int_list_of_sequences)):
@@ -557,15 +570,9 @@ class RnnWithNumpy:
                 trained_count += 1
 
                 if (seq_index + 1) % batch_size == 0:
-                    logger.info("Processed %d total training samples. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
-                        trained_count, epoch_count, max_epoch, batch_processed_count, batch_loss / batch_processed_count)
-
-                    if batch_callback is not None:
-                        batch_callback(self)
-
-                    batch_loss = 0
-                    batch_processed_count = 0
+                    _print_loss_and_do_callback()
 
             epoch_count += 1
+            _print_loss_and_do_callback()
 
 
