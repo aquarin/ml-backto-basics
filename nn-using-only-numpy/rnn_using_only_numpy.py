@@ -528,6 +528,8 @@ class RnnWithNumpy:
         assert len(x_input_int_list_of_sequences) == len(y_label_int_list_of_sequences)
         assert isinstance(batch_size, int)
 
+        logger.info("Training started. dim_hidden=%d, dim_vocab=%d", self.dim_hidden, self.dim_vocab)
+
         batch_loss = 0
         batch_processed_count = 0
         trained_count = 0
@@ -537,7 +539,7 @@ class RnnWithNumpy:
         def _print_loss_and_do_callback():
             nonlocal batch_loss, batch_processed_count, trained_count, epoch_count, start_time
             logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
-                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_loss / batch_processed_count)
+                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_loss / max(batch_processed_count, 1))
 
             if batch_callback is not None:
                 batch_callback(self)

@@ -57,8 +57,8 @@ class ModelUtils:
         input_id_seqs = ModelUtils.string_sequences_to_id_sequences(input_seqs, char_to_id_map)
         label_id_seqs = ModelUtils.string_sequences_to_id_sequences(label_seqs, char_to_id_map)
 
-        logger.info('Done converting creating input/label sequences. Training sample size=%d, vocab size=%d',
-            len(input_id_seqs), len(vocab))
+        logger.info('Done converting creating input/label sequences. Training sample size=%d, vocab size=%d, sequence length=%d.',
+            len(input_id_seqs), len(vocab), sequence_length)
 
         return vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs
 
