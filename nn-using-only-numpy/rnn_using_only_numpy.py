@@ -301,20 +301,12 @@ class RnnWithNumpy:
             check_shapes=check_shapes, debug_output_dict=None, print_debug=False)
 
         partial_loss_partial_w = (np.zeros([dim_hidden, dim_hidden]) if np.isscalar(partial_state_partial_w) and partial_state_partial_w == 0
-            else np.matmul(partial_loss_partial_new_state, partial_state_partial_w))
-
-        # Embarrassingly, I don't fully know the reason I need to do a vstack() then a .T here.
-        # Likely due to the following reasons, but I don't have time to drill-down to confirm them, as I am short on time and just want to get
-        # this RNN running --
-        # 1. In the input, state vector is a 1 x dim_hidden row vector. On my paper calculations, it's treated as a column vector. And np automatically 
-        #    transposes them (or the results), when I called np.matmul(matrix, row_vector), treating it as if a matmul(matrix, col_vector)
-        # 2. Due to 1, some mis-transpositions happened during the process, I don't know where. If I have time, I can dig them out and correct the code,
-        #    rather than doing this patch-up here.
-        partial_loss_partial_w = np.vstack(partial_loss_partial_w).T
+            # My own crafted 3-dimensional "Jacobian" at element(i,j,m), meant partial(F_m)/partial(W_[i,j]). So I need to hand-write this 
+            # einsum to do this multiplication. TODO: probably I should fix the order of the indices of higher dimension jacobians later.
+            else np.einsum('m,ijm->ij', partial_loss_partial_new_state, partial_state_partial_w))
 
         if check_shapes:
-            pass
-            # assert partial_loss_partial_w.shape == matrix_w.shape
+            assert partial_loss_partial_w.shape == matrix_w.shape
 
         return (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w)
 
@@ -385,10 +377,11 @@ class RnnWithNumpy:
         def _create_partial_f_partial_param_1(prev_state_vector):
             if check_shapes:
                 assert prev_state_vector.ndim == 1 and prev_state_vector.size == dim_hidden
-            partial_f_partial_param_1 = np.full([dim_hidden, dim_hidden], None, dtype=object)
+            partial_f_partial_param_1 = np.zeros([dim_hidden, dim_hidden, dim_hidden])
             for i in range(dim_hidden):
                 for j in range(dim_hidden):
-                    partial_f_partial_param_1[i][j] = np.zeros(dim_hidden).T
+                    # Also, this equals to (partial(W)/partial(W)) * prev_state_vector. partial(W)/partial(W) is 4 dimensional [dim_hidden, dim_hidden, dim_hidden, dim_hidden] size
+                    # matrix, with 1 at only (i, j, i, j), rest 0.
                     partial_f_partial_param_1[i][j][i] = prev_state_vector[j]
 
             return partial_f_partial_param_1
@@ -408,8 +401,9 @@ class RnnWithNumpy:
         partial_state_raw_partial_w = partial_f_partial_param_1 + (
             0 if (
                 np.isscalar(partial_prev_state_partial_matrix_w) and partial_prev_state_partial_matrix_w == 0)
-            else np.matmul(partial_f_partial_param_2.T, partial_prev_state_partial_matrix_w))
-        partial_state_partial_w = np.matmul(diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
+            else np.einsum('km,ijm->ijk', partial_f_partial_param_2, partial_prev_state_partial_matrix_w))
+
+        partial_state_partial_w = np.einsum('km,ijm->ijk', diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
 
         if print_debug and debug_output_dict == None:
             # Just to avoid duplicate debug tracing code in below.
