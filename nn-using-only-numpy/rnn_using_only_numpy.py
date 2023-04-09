@@ -26,14 +26,18 @@ class RnnWithNumpy:
         self.dim_vocab = dim_vocab
         self.dim_hidden = dim_hidden
 
+        # Glorot initialization, Gaussian distribution version.
+        u_variance = math.sqrt(2.0 / dim_vocab)
         # Matrix U is the one that transforms input one-hot vector into its embedding.
-        self.matrix_u = np.random.uniform(-.8, .8, dim_hidden * dim_vocab).reshape(dim_hidden, dim_vocab)
+        self.matrix_u = np.random.normal(0.0, u_variance, [dim_hidden, dim_vocab])
 
         # Transforms post-activation (tanh) state into logits (output embedding)
-        self.matrix_v = np.random.uniform(-.8, .8, dim_hidden * dim_vocab).reshape(dim_vocab, dim_hidden)
+        v_variance = math.sqrt(2.0 / dim_hidden)
+        self.matrix_v = np.random.normal(0.0, u_variance, [dim_vocab, dim_hidden])
 
         # Transforms previous state (s[t-1]) into part of next state, before activation.
-        self.matrix_w = np.random.uniform(-.8, .8, dim_hidden * dim_hidden).reshape(dim_hidden, dim_hidden)
+        w_variance = math.sqrt(2.0 / dim_hidden)
+        self.matrix_w = np.random.normal(0.0, w_variance, [dim_hidden, dim_hidden])
 
         # No hidden state vector here as member variable. That will be held in each training/prediction's
         # own function call variables.
