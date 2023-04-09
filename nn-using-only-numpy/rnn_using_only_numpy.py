@@ -535,17 +535,30 @@ class RnnWithNumpy:
         trained_count = 0
         epoch_count = 0
         start_time = time.time()
+        sequential_loss_gradient_uvw_mini_batch = []
 
-        def _print_loss_and_do_callback():
-            nonlocal batch_loss, batch_processed_count, trained_count, epoch_count, start_time
+        def _update_weights_and_do_callback():
+            nonlocal batch_loss, batch_processed_count, trained_count, epoch_count, start_time, sequential_loss_gradient_uvw_mini_batch
             logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
                 trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_loss / max(batch_processed_count, 1))
+
+            if (len(sequential_loss_gradient_uvw_mini_batch) > 0):
+                sequential_loss_gradient_uvw = _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch)
+                sequential_loss_gradient_uvw_mini_batch = []
+                self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=fixed_learning_rate, check_shapes=True)
 
             if batch_callback is not None:
                 batch_callback(self)
 
             batch_loss = 0
             batch_processed_count = 0
+
+        def _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch):
+            gradient_u = np.average(list(map(lambda tuple: tuple[0], sequential_loss_gradient_uvw_mini_batch)), axis=0)
+            gradient_v = np.average(list(map(lambda tuple: tuple[1], sequential_loss_gradient_uvw_mini_batch)), axis=0)
+            gradient_w = np.average(list(map(lambda tuple: tuple[2], sequential_loss_gradient_uvw_mini_batch)), axis=0)
+
+            return (gradient_u, gradient_v, gradient_w)
 
         while epoch_count < max_epoch:
             for seq_index in range(len(x_input_int_list_of_sequences)):
@@ -570,15 +583,15 @@ class RnnWithNumpy:
                         label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
                         bptt_truncation_len=10, check_shapes=False))
 
-                self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=fixed_learning_rate, check_shapes=True)
+                sequential_loss_gradient_uvw_mini_batch.append(sequential_loss_gradient_uvw)
 
                 batch_processed_count += 1
                 trained_count += 1
 
                 if (seq_index + 1) % batch_size == 0:
-                    _print_loss_and_do_callback()
+                    _update_weights_and_do_callback()
 
             epoch_count += 1
-            _print_loss_and_do_callback()
+            _update_weights_and_do_callback()
 
 
