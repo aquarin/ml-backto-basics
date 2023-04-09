@@ -614,6 +614,160 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             step_size=1e-5, check_shapes=True)
 
 
+    def test_optimize_bptt_matrix_operations(self):
+        dim_hidden = 4
+
+        def _create_partial_f_partial_param_1_version_new(prev_state_vector):
+            partial_f_partial_param_1 = np.zeros([dim_hidden, dim_hidden, dim_hidden])
+            for i in range(dim_hidden):
+                for j in range(dim_hidden):
+                    partial_f_partial_param_1[i][j][i] = prev_state_vector[j]
+
+            return partial_f_partial_param_1
+
+        def _create_partial_f_partial_param_1_version_old(prev_state_vector):
+            partial_f_partial_param_1 = np.full([dim_hidden, dim_hidden], None, dtype=object)
+            for i in range(dim_hidden):
+                for j in range(dim_hidden):
+                    partial_f_partial_param_1[i][j] = np.zeros(dim_hidden).T
+                    partial_f_partial_param_1[i][j][i] = prev_state_vector[j]
+
+            return partial_f_partial_param_1
+
+        prev_state_vector = np.array([.1, .2, .3, .4])
+
+        generated_old = _create_partial_f_partial_param_1_version_old(prev_state_vector)
+        generated_new = _create_partial_f_partial_param_1_version_new(prev_state_vector)
+
+        logger.debug("old=\n%s\n, new=\n%s\n", generated_old, generated_new)
+
+        matrix_w = np.arange(dim_hidden * dim_hidden).reshape([dim_hidden, dim_hidden]) / (dim_hidden * dim_hidden)
+
+        mul_old = np.matmul(matrix_w, generated_old)
+        mul_new = np.einsum('mn,ijm->ijn', matrix_w, generated_new)
+
+        # Convert the 2d matrix of object (vector) into a 3d matrix.
+        mul_old_3d = np.empty([dim_hidden, dim_hidden, dim_hidden])
+        for i in range(dim_hidden):
+            for j in range(dim_hidden):
+                for k in range(dim_hidden):
+                    mul_old_3d[i][j][k] = mul_old[i][j][k]
+
+        logger.debug("mul old converted to 3d matrix=\n%s\n, shape=%s, mul new=\n%s\n, shape=%s",
+            mul_old_3d, mul_old_3d.shape, mul_new, mul_new.shape)
+
+        np.testing.assert_almost_equal(mul_old_3d, mul_new, 5)
+
+
+    '''
+    I have hand calculated the derivative of the following scenario but need to verify that numerically.
+
+    F(W) = W * S(W)
+    W: n by n matrix
+    F: n by n -> 1 by n function
+    S: n by n -> 1 by n function
+
+    Wanted to calculate: partial(F(W))/partial(W) (a n by n -> (n by n by n) function, and a (n by n by n) tensor, given a fixed W_0)
+
+    My calcualtions gave:
+    partial(F(W))/partil(W) = A + B
+
+    A is (n by n by n), given a fixed W_0:
+       A(i, j, k) = 0 if k != i
+       S(W_0)[j] if k = i
+
+    B is (n by n by n), given a fixed W_0:
+        B = einsum('km,ijm->ijk', W_0, partial(S)/partial(W)@W_0)
+        partial(S)/partial(W) is a (n by n by n) tensor given fixed W_0
+
+    See derivative_of_W_times_S(S)_1.PNG and _2.PNG for my hand calculations.
+
+    '''
+    def test_derivative_of_product_of_two_matrix_functions(self):
+        def _s(w):
+            assert w.shape == (3,3)
+            result = np.zeros(3)
+            result[0] = w[0][0] * 3 + w[0][1] * 2 + w[0][2] ** 2
+            result[1] = w[1][0] * 4 + w[1][1] * 3 + w[1][2] ** 3
+            result[2] = w[2][0] * 5 + w[2][1] * 4 + w[2][2] ** 4
+
+            return result
+
+        def _f(w):
+            assert w.shape == (3, 3)
+            return np.matmul(w, _s(w))
+
+
+        def _partial_s_partial_w(w_0):
+            assert w_0.shape == (3,3)
+            result = np.zeros([3, 3, 3])
+
+            result[0][0][:] = [3, 0, 0]
+            result[0][1][:] = [2, 0, 0]
+            result[0][2][:] = [2 * w_0[0][2], 0, 0]
+
+            result[1][0][:] = [0, 4, 0]
+            result[1][1][:] = [0, 3, 0]
+            result[1][2][:] = [0, 3 * w_0[1][2] ** 2, 0]
+
+            result[2][0][:] = [0, 0, 5]
+            result[2][1][:] = [0, 0, 4]
+            result[2][2][:] = [0, 0, 4 * w_0[2][2] ** 3]
+
+            return result
+
+        def _numerical_derivative(func, w_0, i, j, delta_x_scalar):
+            assert w_0.shape == (3, 3)
+            assert np.isscalar(delta_x_scalar)
+
+            delta_x_matrix = np.zeros([3, 3])
+            delta_x_matrix[i][j] = delta_x_scalar
+
+            output_delta = func(w_0 + delta_x_matrix) - func(w_0)
+            return output_delta / delta_x_scalar
+
+
+        def _compare_numerical_vs_theoretical_derivative(
+            func, theoretical_derivative, w_0):
+            theoretical = theoretical_derivative(w_0)
+            for i in range(3):
+                for j in range(3):
+                    numerical = _numerical_derivative(func, w_0, i, j, 1e-5)
+                    logger.debug("(i,j)=(%d, %d): theoretical derivative=\n%s\n, numerical derivative=\n%s\n",
+                        i, j, numerical, theoretical[i][j])
+                    np.testing.assert_almost_equal(
+                        numerical, theoretical[i][j], 3)
+
+
+        def _partial_f_partial_w(w_0):
+            s_w_0 = _s(w_0)
+
+            # See my notes, image: derivative_of_W_times_S(S)
+            sum_A = np.zeros([3, 3, 3])
+            for i in range(3):
+                for j in range(3):
+                    sum_A[i][j][i] = s_w_0[j]
+
+            sum_B = np.einsum('km,ijm->ijk', w_0, _partial_s_partial_w(w_0))
+
+            return sum_A + sum_B
+
+
+        w_0 = np.zeros(9).reshape([3, 3])
+        _compare_numerical_vs_theoretical_derivative(_s, _partial_s_partial_w, w_0)
+        w_0 = np.ones(9).reshape([3, 3])
+        _compare_numerical_vs_theoretical_derivative(_s, _partial_s_partial_w, w_0)
+        w_0 = np.random.randn(9).reshape([3, 3])
+        _compare_numerical_vs_theoretical_derivative(_s, _partial_s_partial_w, w_0)
+
+        w_0 = np.zeros(9).reshape([3, 3])
+        _compare_numerical_vs_theoretical_derivative(_f, _partial_f_partial_w, w_0)
+        w_0 = np.ones(9).reshape([3, 3])
+        _compare_numerical_vs_theoretical_derivative(_f, _partial_f_partial_w, w_0)
+        w_0 = np.random.randn(9).reshape([3, 3])
+        _compare_numerical_vs_theoretical_derivative(_f, _partial_f_partial_w, w_0)
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
