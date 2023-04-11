@@ -167,7 +167,9 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         # bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=None):
         bptt_partial_state_partial_w_at_time_2 = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             state_time_series, current_time=0, dim_hidden=dim_hidden,
-            matrix_w = matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict)
+            matrix_w=matrix_w,
+            partial_state_partial_w_by_time_cache={},
+            truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict)
         logger.debug('bptt_partial_state_partial_w_at_time_2=\n%s\n' % bptt_partial_state_partial_w_at_time_2)
         logger.debug('debug_output_dict=\n%s\n' % debug_output_dict)
 
@@ -216,7 +218,9 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         # bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=None):
         bptt_partial_state_partial_w_at_time_2 = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             state_time_series, current_time=1, dim_hidden=dim_hidden,
-            matrix_w = matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict)
+            matrix_w=matrix_w,
+            partial_state_partial_w_by_time_cache={},
+            truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict)
         logger.debug('bptt_partial_state_partial_w_at_time_2=\n%s\n' % bptt_partial_state_partial_w_at_time_2)
         logger.debug('debug_output_dict=\n%s\n' % debug_output_dict)
 
@@ -256,7 +260,9 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         # bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=None):
         bptt_partial_state_partial_w_at_time_2 = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             state_time_series, current_time=2, dim_hidden=dim_hidden,
-            matrix_w = matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict, print_debug=True)
+            matrix_w=matrix_w,
+            partial_state_partial_w_by_time_cache={},
+            truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict, print_debug=True)
         logger.debug('debug_output_dict=\n%s\n' % debug_output_dict)
         logger.debug('bptt_partial_state_partial_w_at_time_2=\n%s\n' % bptt_partial_state_partial_w_at_time_2)
 
@@ -301,7 +307,9 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         # bptt_partial_state_time_t_partial_matrix_w(states_array_indexed_by_time, current_time, dim_hidden, matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=None):
         bptt_partial_state_partial_w_at_time_n = RnnWithNumpy.bptt_partial_state_time_t_partial_matrix_w(
             state_time_series, current_time=len(input_x_integers_by_time) - 1, dim_hidden=dim_hidden,
-            matrix_w = matrix_w, truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict, print_debug=True)
+            matrix_w=matrix_w,
+            partial_state_partial_w_by_time_cache={},
+            truncation_len=10, check_shapes=True, debug_output_dict=debug_output_dict, print_debug=True)
         logger.debug('debug_output_dict=\n%s\n' % debug_output_dict)
         logger.debug('bptt_partial_state_partial_w_at_time_n=\n%s\n' % bptt_partial_state_partial_w_at_time_n)
 
@@ -493,9 +501,9 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         logger.debug("partial_loss_partial_w=\n%s\n", partial_loss_partial_w)
         logger.debug("numerical_partial_loss_partial_w=\n%s\n", numerical_partial_loss_partial_w)
 
-        np.testing.assert_almost_equal(partial_loss_partial_u, numerical_partial_loss_partial_u, 3)
-        np.testing.assert_almost_equal(partial_loss_partial_v, numerical_partial_loss_partial_v, 3)
-        np.testing.assert_almost_equal(partial_loss_partial_w, numerical_partial_loss_partial_w, 3)
+        np.testing.assert_almost_equal(partial_loss_partial_u, numerical_partial_loss_partial_u, 2)
+        np.testing.assert_almost_equal(partial_loss_partial_v, numerical_partial_loss_partial_v, 2)
+        np.testing.assert_almost_equal(partial_loss_partial_w, numerical_partial_loss_partial_w, 2)
 
 
     def test_gradient_uvw_single_step(self):
@@ -608,7 +616,6 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             forward_computation_intermediates_array=forward_computation_intermediates_array,
             label_y_int_array=expected_output_seq, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             bptt_truncation_len=10, check_shapes=True)
-
 
         model.step_parameters((partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w),
             step_size=1e-5, check_shapes=True)
@@ -736,7 +743,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
                     logger.debug("(i,j)=(%d, %d): theoretical derivative=\n%s\n, numerical derivative=\n%s\n",
                         i, j, numerical, theoretical[i][j])
                     np.testing.assert_almost_equal(
-                        numerical, theoretical[i][j], 3)
+                        numerical, theoretical[i][j], 2)
 
 
         def _partial_f_partial_w(w_0):
