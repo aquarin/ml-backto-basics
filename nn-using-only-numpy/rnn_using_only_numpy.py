@@ -33,7 +33,7 @@ class RnnWithNumpy:
 
         # Transforms post-activation (tanh) state into logits (output embedding)
         v_variance = math.sqrt(2.0 / dim_hidden)
-        self.matrix_v = np.random.normal(0.0, u_variance, [dim_vocab, dim_hidden])
+        self.matrix_v = np.random.normal(0.0, v_variance, [dim_vocab, dim_hidden])
 
         # Transforms previous state (s[t-1]) into part of next state, before activation.
         w_variance = math.sqrt(2.0 / dim_hidden)
@@ -43,9 +43,9 @@ class RnnWithNumpy:
         # own function call variables.
         self.prev_state_vector = np.zeros(dim_hidden)
 
-        self.adam_optimizer_u = AdamOptimizer()
-        self.adam_optimizer_v = AdamOptimizer()
-        self.adam_optimizer_w = AdamOptimizer()
+        self.adam_optimizer_u = AdamOptimizer(alpha=1) # Set learning rate to 1, later multiply the actual earning rate.
+        self.adam_optimizer_v = AdamOptimizer(alpha=1)
+        self.adam_optimizer_w = AdamOptimizer(alpha=1)
 
 
     @staticmethod
@@ -518,12 +518,13 @@ class RnnWithNumpy:
         suggested_delta_v = self.adam_optimizer_v.suggest_delta_x_from_graident(partial_loss_partial_v)
         suggested_delta_w = self.adam_optimizer_w.suggest_delta_x_from_graident(partial_loss_partial_w)
 
-        self.matrix_u += suggested_delta_u
-        self.matrix_v += suggested_delta_v
-        self.matrix_w += suggested_delta_w
+        # Multiplying step_size (same as learning rate) here, is equal to using that step_size as "alpha" inside the ADAM.
+        self.matrix_u += suggested_delta_u * step_size
+        self.matrix_v += suggested_delta_v * step_size
+        self.matrix_w += suggested_delta_w * step_size
 
 
-    def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, fixed_learning_rate,
+    def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences, learning_rate,
         batch_size, max_epoch, batch_callback):
         assert len(x_input_int_list_of_sequences) == len(y_label_int_list_of_sequences)
         assert isinstance(batch_size, int)
@@ -545,7 +546,7 @@ class RnnWithNumpy:
             if (len(sequential_loss_gradient_uvw_mini_batch) > 0):
                 sequential_loss_gradient_uvw = _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch)
                 sequential_loss_gradient_uvw_mini_batch = []
-                self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=fixed_learning_rate, check_shapes=True)
+                self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=learning_rate, check_shapes=True)
 
             if batch_callback is not None:
                 batch_callback(self)

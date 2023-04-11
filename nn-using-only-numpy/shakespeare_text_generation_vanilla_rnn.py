@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Main training parameters
 dim_hidden = 128
-fixed_learning_rate = 0.004
-sequence_length = 25
+learning_rate = 0.004
+sequence_length = 70
 batch_size = 15
 max_epoch = 3000
 text_generation_prompt = 'ROMEO:'
@@ -167,13 +167,10 @@ def test_simple_training():
     def _model_batch_callback(model):
         model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
-    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
+    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=128)
 
-    logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
-        dim_vocab, dim_hidden, sequence_length, fixed_learning_rate)
-
-    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
-        batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
+        batch_size=40, max_epoch=4000, batch_callback=_model_batch_callback)
 
 
 def profile_simple_training():
@@ -187,10 +184,7 @@ def profile_simple_training():
 
     rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
 
-    logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
-        dim_vocab, dim_hidden, sequence_length, fixed_learning_rate)
-
-    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
+    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
         batch_size=1, max_epoch=4, batch_callback=_model_batch_callback)
 
 
@@ -211,10 +205,10 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
         rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=32)
 
-        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
-            dim_vocab, dim_hidden, sequence_length, fixed_learning_rate)
+        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, learning_rate=%f",
+            dim_vocab, dim_hidden, sequence_length, learning_rate)
 
-        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
             batch_size=1, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
 
@@ -229,8 +223,8 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
         rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=64)
 
-        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
-            batch_size=15, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
+            batch_size=30, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
 
     def test_continue_with_previous_model_short_training_data(self):
@@ -247,10 +241,10 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
             model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
         learning_rate = 0.02
-        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
+        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, learning_rate=%f",
             dim_vocab, dim_hidden, sequence_length, learning_rate)
 
-        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=0.001,
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=0.001,
             batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
 
@@ -268,10 +262,10 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
             model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
         learning_rate = 0.001
-        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, fixed_learning_rate=%f",
+        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, learning_rate=%f",
             dim_vocab, dim_hidden, sequence_length, learning_rate)
 
-        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=0.001,
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=0.001,
             batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
     def profile_simple_training(self):
