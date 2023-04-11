@@ -15,6 +15,7 @@ import math
 import numbers
 import numpy as np
 import pickle
+import threading
 import time
 
 from computational_utils import Utilities
@@ -25,7 +26,21 @@ logger = logging.getLogger(__name__)
 # Can't put this as a member method when using ThreadWorkerPool.
 # https://stackoverflow.com/questions/17419879/why-i-cannot-use-python-module-concurrent-futures-in-class-method
 def thread_worker_method(args):
-    logger.debug("_thread_method() entered.")
+    def _get_thread_local_logger():
+        local = threading.local()
+        logger = getattr(local, 'logger', None)
+        if logger is None:
+            logger = logging.getLogger()
+            logger.setLevel(logging.DEBUG)
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            local.logger = logger
+
+        return logger
+
+    logger = _get_thread_local_logger()
 
     (model, input_x_int_sequence, y_label_int_sequence) = args
     assert np.ndim(input_x_int_sequence) == 1 and np.ndim(y_label_int_sequence) == 1
@@ -593,6 +608,9 @@ class RnnWithNumpy:
             gradient_w = np.average(list(map(lambda tuple: tuple[2], sequential_loss_gradient_uvw_mini_batch)), axis=0)
 
             return (gradient_u, gradient_v, gradient_w)
+
+        # Make the callback before any training. Sometimes this is useful to compare the effects, especially to view the text-generation quality throughout the trainings.
+        batch_callback(self)
 
         while epoch_count < max_epoch:
             for batch_start_index in range(0, len(x_input_int_list_of_sequences), batch_size):
