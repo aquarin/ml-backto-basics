@@ -173,19 +173,19 @@ def test_simple_training():
         batch_size=40, max_epoch=4000, batch_callback=_model_batch_callback)
 
 
-def profile_simple_training():
+def profile_training():
     vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
-        text=shorted_text, sequence_length=sequence_length)
+        text=longer_text, sequence_length=sequence_length)
 
     dim_vocab = len(vocab)
 
     def _model_batch_callback(model):
         model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
-    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
+    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=128)
 
     rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
-        batch_size=1, max_epoch=4, batch_callback=_model_batch_callback)
+        batch_size=20, max_epoch=4, batch_callback=_model_batch_callback)
 
 
 class TestNumpyRnnTextGeneration(unittest.TestCase):
@@ -268,12 +268,12 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=0.001,
             batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
-    def profile_simple_training(self):
+    def profile_training(self):
         # Creating profile object
         ob = cProfile.Profile()
         ob.enable()
 
-        cProfile.run('profile_simple_training()')
+        cProfile.run('profile_training()')
 
         sec = io.StringIO()
         sortby = SortKey.CUMULATIVE

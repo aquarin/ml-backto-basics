@@ -9,6 +9,7 @@ Purpose of doing this:
   NOTES: there is no bias term in this model. Probably I should add bias some time later.
 '''
 
+import concurrent.futures
 import logging
 import math
 import numbers
@@ -20,6 +21,34 @@ from computational_utils import Utilities
 from adam_optimizer import AdamOptimizer
 
 logger = logging.getLogger(__name__)
+
+# Can't put this as a member method when using ThreadWorkerPool.
+# https://stackoverflow.com/questions/17419879/why-i-cannot-use-python-module-concurrent-futures-in-class-method
+def thread_worker_method(args):
+    logger.debug("_thread_method() entered.")
+
+    (model, input_x_int_sequence, y_label_int_sequence) = args
+    assert np.ndim(input_x_int_sequence) == 1 and np.ndim(y_label_int_sequence) == 1
+
+    self = model
+    forward_computation_intermediates_array = self.forward_sequence(
+        input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+        matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+        start_state_vector=None, check_shapes=False, print_debug=False)
+
+    sequential_loss = self.sequence_loss_from_forward_computations(
+        dim_vocab=self.dim_vocab, forward_computation_intermediates_array=forward_computation_intermediates_array,
+        label_y_int_array=y_label_int_sequence, check_shapes=False)
+
+    sequential_loss_gradient_uvw = (
+        self.sequence_loss_gradient_u_v_w(forward_computation_intermediates_array=forward_computation_intermediates_array,
+            label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
+            bptt_truncation_len=10, check_shapes=False))
+
+    logger.info("Trained one sample.")
+
+    return (sequential_loss, sequential_loss_gradient_uvw)
+
 
 class RnnWithNumpy:
     def __init__(self, dim_vocab, dim_hidden):
@@ -46,6 +75,8 @@ class RnnWithNumpy:
         self.adam_optimizer_u = AdamOptimizer(alpha=1) # Set learning rate to 1, later multiply the actual earning rate.
         self.adam_optimizer_v = AdamOptimizer(alpha=1)
         self.adam_optimizer_w = AdamOptimizer(alpha=1)
+
+        self.thread_worker_count = 10 # TODO: parameterize this.
 
 
     @staticmethod
@@ -529,19 +560,21 @@ class RnnWithNumpy:
         assert len(x_input_int_list_of_sequences) == len(y_label_int_list_of_sequences)
         assert isinstance(batch_size, int)
 
-        logger.info("Training started. dim_hidden=%d, dim_vocab=%d", self.dim_hidden, self.dim_vocab)
+        logger.info("Training started. dim_hidden=%d, dim_vocab=%d, thread_worker_count=%d",
+            self.dim_hidden, self.dim_vocab, self.thread_worker_count)
 
-        batch_loss = 0
+        batch_avg_loss = 0
         batch_processed_count = 0
         trained_count = 0
         epoch_count = 0
         start_time = time.time()
         sequential_loss_gradient_uvw_mini_batch = []
+        executor = concurrent.futures.ProcessPoolExecutor(max_workers=self.thread_worker_count) # TODO: parameterize this.
 
         def _update_weights_and_do_callback():
-            nonlocal batch_loss, batch_processed_count, trained_count, epoch_count, start_time, sequential_loss_gradient_uvw_mini_batch
+            nonlocal batch_avg_loss, batch_processed_count, trained_count, epoch_count, start_time, sequential_loss_gradient_uvw_mini_batch
             logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
-                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_loss / max(batch_processed_count, 1))
+                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_avg_loss)
 
             if (len(sequential_loss_gradient_uvw_mini_batch) > 0):
                 sequential_loss_gradient_uvw = _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch)
@@ -551,7 +584,7 @@ class RnnWithNumpy:
             if batch_callback is not None:
                 batch_callback(self)
 
-            batch_loss = 0
+            batch_avg_loss = 0
             batch_processed_count = 0
 
         def _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch):
@@ -562,37 +595,22 @@ class RnnWithNumpy:
             return (gradient_u, gradient_v, gradient_w)
 
         while epoch_count < max_epoch:
-            for seq_index in range(len(x_input_int_list_of_sequences)):
-                logger.info("Training one sample...")
-                input_x_int_sequence = x_input_int_list_of_sequences[seq_index]
-                y_label_int_sequence = y_label_int_list_of_sequences[seq_index]
+            for batch_start_index in range(0, len(x_input_int_list_of_sequences), batch_size):
+                input_x_int_sequence_mini_batch = x_input_int_list_of_sequences[batch_start_index : batch_start_index + batch_size]
+                y_label_int_sequence_mini_batch = y_label_int_list_of_sequences[batch_start_index : batch_start_index + batch_size]
+                training_thread_inputs = zip(
+                    [self] * len(input_x_int_sequence_mini_batch), # Have to pass "self' as a parameter to the worker thread method, as I cannot use a member method to call executor.
+                    input_x_int_sequence_mini_batch,
+                    y_label_int_sequence_mini_batch)
 
-                assert np.ndim(input_x_int_sequence) == 1 and np.ndim(y_label_int_sequence) == 1
+                training_outputs = list(executor.map(thread_worker_method, list(training_thread_inputs)))
 
-                forward_computation_intermediates_array = self.forward_sequence(
-                    input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
-                    matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
-                    start_state_vector=None, check_shapes=False, print_debug=False)
+                (sequential_losses, sequential_loss_gradient_uvw_mini_batch) = zip(*training_outputs)
 
-                sequential_loss = self.sequence_loss_from_forward_computations(
-                    dim_vocab=self.dim_vocab, forward_computation_intermediates_array=forward_computation_intermediates_array,
-                    label_y_int_array=y_label_int_sequence, check_shapes=False)
-                batch_loss += sequential_loss
-
-                sequential_loss_gradient_uvw = (
-                    self.sequence_loss_gradient_u_v_w(forward_computation_intermediates_array=forward_computation_intermediates_array,
-                        label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
-                        bptt_truncation_len=10, check_shapes=False))
-
-                sequential_loss_gradient_uvw_mini_batch.append(sequential_loss_gradient_uvw)
-
-                batch_processed_count += 1
-                trained_count += 1
-
-                if (seq_index + 1) % batch_size == 0:
-                    _update_weights_and_do_callback()
+                batch_avg_loss = np.average(sequential_losses)
+                batch_processed_count = len(training_outputs)
+                trained_count += len(training_outputs)
+                _update_weights_and_do_callback()
 
             epoch_count += 1
-            _update_weights_and_do_callback()
-
 

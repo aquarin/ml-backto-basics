@@ -40,8 +40,8 @@ test_text = '''
 
 # Main training parameters
 dim_hidden = 128
-fixed_learning_rate = 0.004
-sequence_length = 25
+learning_rate = 0.004
+sequence_length = 40
 batch_size = 10
 max_epoch=20
 
@@ -69,7 +69,7 @@ def test_simple_training():
 
     rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
 
-    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, fixed_learning_rate=fixed_learning_rate,
+    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
         batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
 
