@@ -60,8 +60,6 @@ def thread_worker_method(args):
             label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
             bptt_truncation_len=10, check_shapes=False))
 
-    logger.info("Trained one sample.")
-
     return (sequential_loss, sequential_loss_gradient_uvw)
 
 
@@ -579,6 +577,7 @@ class RnnWithNumpy:
             self.dim_hidden, self.dim_vocab, self.thread_worker_count)
 
         batch_avg_loss = 0
+        batch_avg_loss_history = []
         batch_processed_count = 0
         trained_count = 0
         epoch_count = 0
@@ -609,6 +608,36 @@ class RnnWithNumpy:
 
             return (gradient_u, gradient_v, gradient_w)
 
+
+        # TODO: abstract this out and make it a separate learning rate scheduler.
+        def _new_learning_rate_if_plataeu(batch_loss_history, learning_rate):
+            comparison_moving_window_size = 20
+            is_plataeu_criteria = .95
+            min_calls_since_last_adjustment = 20
+            learning_rate_adjustment_ratio = .7
+
+            _new_learning_rate_if_plataeu.calls_since_last_adjustment = getattr(_new_learning_rate_if_plataeu, 'calls_since_last_adjustment', -1)
+            _new_learning_rate_if_plataeu.calls_since_last_adjustment += 1
+
+            if _new_learning_rate_if_plataeu.calls_since_last_adjustment  < min_calls_since_last_adjustment:
+                return learning_rate
+
+            if len(batch_loss_history) <= 2 * comparison_moving_window_size:
+                return learning_rate
+
+            avg1 = np.average(batch_loss_history[-2 * comparison_moving_window_size : - comparison_moving_window_size])
+            avg2 = np.average(batch_loss_history[- comparison_moving_window_size :])
+
+            if avg2 > avg1 * is_plataeu_criteria:
+                new_learning_rate = learning_rate * learning_rate_adjustment_ratio
+                _new_learning_rate_if_plataeu.calls_since_last_adjustment = 0
+
+                logger.info("Adjusting learning rate to %f", new_learning_rate)
+                return new_learning_rate
+
+            return learning_rate
+
+
         # Make the callback before any training. Sometimes this is useful to compare the effects, especially to view the text-generation quality throughout the trainings.
         batch_callback(self)
 
@@ -626,8 +655,10 @@ class RnnWithNumpy:
                 (sequential_losses, sequential_loss_gradient_uvw_mini_batch) = zip(*training_outputs)
 
                 batch_avg_loss = np.average(sequential_losses)
+                batch_avg_loss_history.append(batch_avg_loss)
                 batch_processed_count = len(training_outputs)
                 trained_count += len(training_outputs)
+                learning_rate = _new_learning_rate_if_plataeu(batch_avg_loss_history, learning_rate)
                 _update_weights_and_do_callback()
 
             epoch_count += 1

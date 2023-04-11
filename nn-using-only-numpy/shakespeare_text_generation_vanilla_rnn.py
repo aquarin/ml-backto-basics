@@ -161,13 +161,13 @@ def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map,
 
 def test_simple_training():
     vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
-        filepath=text_file, sequence_length=sequence_length)
+        filepath=text_file, sequence_length=40)
     dim_vocab = len(vocab)
 
     def _model_batch_callback(model):
         model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
-    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=128)
+    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=80)
 
     rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
         batch_size=40, max_epoch=4000, batch_callback=_model_batch_callback)
@@ -221,7 +221,7 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         def _model_batch_callback(model):
             model_training_batch_callback(model, 'KING ', char_to_id_map, id_to_char_map, output_length=100)
 
-        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=64)
+        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=128)
 
         rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
             batch_size=30, max_epoch=max_epoch, batch_callback=_model_batch_callback)
