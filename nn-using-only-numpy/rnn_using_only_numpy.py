@@ -575,6 +575,8 @@ class RnnWithNumpy:
             assert partial_loss_partial_v.shape == self.matrix_v.shape
             assert partial_loss_partial_w.shape == self.matrix_w.shape
 
+        self.monitor_gradients(loss_gradient_u_v_w, gradient_clipping_radius)
+
         # TODO: probably add some gradient monitorings here.
         if gradient_clipping_radius > 0:
             partial_loss_partial_u = np.clip(partial_loss_partial_u, -gradient_clipping_radius, gradient_clipping_radius)
@@ -589,6 +591,27 @@ class RnnWithNumpy:
         self.matrix_u += suggested_delta_u * step_size
         self.matrix_v += suggested_delta_v * step_size
         self.matrix_w += suggested_delta_w * step_size
+
+
+    # TODO: move this method into a separate util class?
+    @staticmethod
+    def monitor_gradients(loss_gradient_u_v_w, gradient_clipping_radius):
+        gradient_names = ['u', 'v', 'w']
+
+        for i in range(3):
+            gradient = loss_gradient_u_v_w[i]
+            p98 = np.quantile(gradient, .95)
+            p02 = np.quantile(gradient, .02)
+            avg = np.average(gradient)
+            clipped_count = 0
+
+            if gradient_clipping_radius > 0:
+                clipped_count = np.count_nonzero(gradient >= gradient_clipping_radius)
+                clipped_count += np.count_nonzero(gradient <= - gradient_clipping_radius)
+
+            logger.info("For gradient %s, avg=%f, p98=%f, p02=%f, clipped count=%d",
+                gradient_names[i],
+                avg, p98, p02, clipped_count)
 
 
     def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences,
