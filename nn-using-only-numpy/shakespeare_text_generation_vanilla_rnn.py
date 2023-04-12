@@ -2,6 +2,7 @@ import io
 import datetime
 import logging
 import numpy as np
+import os
 import pickle
 import unittest
 
@@ -24,7 +25,7 @@ max_epoch = 3000
 text_generation_prompt = 'ROMEO:'
 text_file = './training_data/shakespeare.txt'
 
-shorted_text = (
+short_text = (
 'ROMEO: Is the day so young?''')
 
 longer_text =(
@@ -147,7 +148,11 @@ So.
 
 def save_model(model):
     filepath_template = './saved_numpy_models/model_%s.pkl'
+    folder = './saved_numpy_models'
     filepath = filepath_template % datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
     with open(filepath, 'wb') as file:
         pickle.dump(model, file)
@@ -157,20 +162,6 @@ def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map,
     generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
     logger.info("Generated text=\n%s", generated_text)
     save_model(model)
-
-
-def test_simple_training():
-    vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
-        filepath=text_file, sequence_length=40, truncation=45000)
-    dim_vocab = len(vocab)
-
-    def _model_batch_callback(model):
-        model_training_batch_callback(model, 'MARCIUS:', char_to_id_map, id_to_char_map, output_length=100)
-
-    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=80)
-
-    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
-        batch_size=10, max_epoch=4000, batch_callback=_model_batch_callback)
 
 
 def profile_training():
@@ -190,13 +181,62 @@ def profile_training():
 
 class TestNumpyRnnTextGeneration(unittest.TestCase):
 
-    def test_simple_training(self):
-        test_simple_training()
+    def test_text_file_training_truncation_45000(self):
+        training_parameters = {
+            'thread_worker_count': 10,
+            'gradient_clipping_radius': 1,
+            'bptt_truncation_length': 10,
+            'base_learning_rate': 0.003,
+            'mini_batch_size': 1,
+            'max_epoch': 200,
+
+            # Learning Rate adjustments
+            'learning_rate_reduction_ratio_when_plataeu': .5,
+            'loss_plataeu_check_window': 20,
+            'min_batches_since_last_lr_adjustment': 40,
+            # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
+            'is_plataeu_criteria_ratio': 1.0
+        }
+
+        text_generation_prompt = 'MARCIUS'
+        sequence_length = 25
+
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
+            filepath=text_file, sequence_length=40, truncation=45000)
+
+        dim_vocab = len(vocab)
+
+        def _model_batch_callback(model):
+            model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
+
+        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=80)
+
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
+            training_parameters=training_parameters, batch_callback=_model_batch_callback)
 
 
     def test_with_very_short_training_data(self):
+        training_parameters = {
+            'thread_worker_count': 10,
+            'gradient_clipping_radius': 1,
+            'bptt_truncation_length': 10,
+            'base_learning_rate': 0.003,
+            'mini_batch_size': 1,
+            'max_epoch': 200,
+
+            # Learning Rate adjustments
+            'learning_rate_reduction_ratio_when_plataeu': .5,
+            'loss_plataeu_check_window': 20,
+            'min_batches_since_last_lr_adjustment': 40,
+            # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
+            'is_plataeu_criteria_ratio': 1.0
+        }
+
+        text_generation_prompt = 'ROMEO'
+        sequence_length = 25
+
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
-            text=shorted_text, sequence_length=sequence_length)
+            text=short_text, sequence_length=sequence_length)
 
         dim_vocab = len(vocab)
 
@@ -205,26 +245,42 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
         rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=32)
 
-        logger.info("Training started. dim_vocab=%d, dim_hidden=%d, sequence_length=%d, learning_rate=%f",
-            dim_vocab, dim_hidden, sequence_length, learning_rate)
-
-        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
-            batch_size=1, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
+            training_parameters=training_parameters, batch_callback=_model_batch_callback)
 
 
     def test_longer_text_training(self):
+        training_parameters = {
+            'thread_worker_count': 11,
+            'gradient_clipping_radius': 1,
+            'bptt_truncation_length': 10,
+            'base_learning_rate': 0.003,
+            'mini_batch_size': 11,
+            'max_epoch': 200,
+
+            # Learning Rate adjustments
+            'learning_rate_reduction_ratio_when_plataeu': .5,
+            'loss_plataeu_check_window': 20,
+            'min_batches_since_last_lr_adjustment': 40,
+            # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
+            'is_plataeu_criteria_ratio': 1.0
+        }
+        text_generation_prompt = 'QUEEN'
+        sequence_length = 45
+        hidden_dim = 64
+
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
             text=longer_text, sequence_length=35)
 
         dim_vocab = len(vocab)
 
         def _model_batch_callback(model):
-            model_training_batch_callback(model, 'KING ', char_to_id_map, id_to_char_map, output_length=100)
+            model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
-        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=128)
+        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=hidden_dim)
 
-        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
-            batch_size=30, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
+            training_parameters=training_parameters, batch_callback=_model_batch_callback)
 
 
     def test_continue_with_previous_model_short_training_data(self):
@@ -267,6 +323,7 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
         rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=0.001,
             batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
+
 
     def profile_training(self):
         # Creating profile object
