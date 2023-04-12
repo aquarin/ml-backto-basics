@@ -165,6 +165,7 @@ def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map,
 
 
 def profile_training():
+    raise NotImplementedError('Needs to rewrite this code to accommodate latest train() signatures.')
     vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
         text=longer_text, sequence_length=sequence_length)
 
@@ -200,19 +201,21 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
         text_generation_prompt = 'MARCIUS'
         sequence_length = 25
+        hidden_dim = 80
 
-        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
-            filepath=text_file, sequence_length=40, truncation=45000)
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data(
+            filepath=text_file, sequence_length=40, truncation=45000, shuffle_data=True, percentage_val_set=.05)
 
         dim_vocab = len(vocab)
 
         def _model_batch_callback(model):
             model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
 
-        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=80)
+        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=hidden_dim)
 
         rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
-            training_parameters=training_parameters, batch_callback=_model_batch_callback)
+            training_parameters=training_parameters, batch_callback=_model_batch_callback,
+            validation_x_input_int_list_of_sequences=validation_inputs, validation_y_label_int_list_of_sequences=validation_labels)
 
 
     def test_with_very_short_training_data(self):
