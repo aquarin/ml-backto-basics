@@ -104,7 +104,7 @@ class RnnWithNumpy:
             'loss_plataeu_check_window': 20,
             'min_batches_since_last_lr_adjustment': 40,
             # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
-            'is_plataeu_criteria_ratio': 1.0
+            'is_plataeu_criteria_ratio': 1.0,
         }
 
 
@@ -614,18 +614,39 @@ class RnnWithNumpy:
                 avg, p98, p02, clipped_count)
 
 
+    @staticmethod
+    def evaluate_loss_against_dataset(model, input_x_int_sequences, y_label_int_sequences):
+        assert len(input_x_int_sequences) == len(y_label_int_sequences)
+
+        dataset_loss = 0
+
+        for sequence_index in range(len(input_x_int_sequences)):
+            start_state_vector = np.zeros(model.dim_hidden)
+            computed = RnnWithNumpy.forward_sequence(
+                input_x_int_sequences[sequence_index], model.dim_vocab, model.dim_hidden,
+                model.matrix_u, model.matrix_v, model.matrix_w, start_state_vector, check_shapes=True, print_debug=False)
+            sequence_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
+                model.dim_vocab, computed, y_label_int_sequences[sequence_index], check_shapes=True)
+
+            dataset_loss += sequence_loss
+
+        return dataset_loss / len(input_x_int_sequences)
+
+
     def train(self, x_input_int_list_of_sequences, y_label_int_list_of_sequences,
-        training_parameters, batch_callback=None):
+        training_parameters, batch_callback=None,
+        validation_x_input_int_list_of_sequences=None, validation_y_label_int_list_of_sequences=None):
         # learning_rate,
         # batch_size, max_epoch, batch_callback, gradient_clipping_radius=-1):
 
-        logger.info("Training parameters=%s", training_parameters)
         temp = training_parameters
         training_parameters = self.default_training_parameters.copy()
         training_parameters.update(temp)
         logger.info("Training parameters=%s", training_parameters)
 
         assert len(x_input_int_list_of_sequences) == len(y_label_int_list_of_sequences)
+        if validation_x_input_int_list_of_sequences is not None:
+            assert len(validation_x_input_int_list_of_sequences) == len(validation_y_label_int_list_of_sequences)
 
         thread_worker_count = training_parameters['thread_worker_count']
         learning_rate = training_parameters['base_learning_rate']
@@ -633,11 +654,13 @@ class RnnWithNumpy:
         gradient_clipping_radius = training_parameters['gradient_clipping_radius']
         max_epoch = training_parameters['max_epoch']
 
-        logger.info("Training started. dim_hidden=%d, dim_vocab=%d, thread_worker_count=%d",
-            self.dim_hidden, self.dim_vocab, thread_worker_count)
+        logger.info("Training started. dim_hidden=%d, dim_vocab=%d, thread_worker_count=%d, training set size=%d, validation set size=%d",
+            self.dim_hidden, self.dim_vocab, thread_worker_count, len(x_input_int_list_of_sequences),
+            len(validation_x_input_int_list_of_sequences) if validation_x_input_int_list_of_sequences is not None else 0)
 
         batch_avg_loss = 0
         batch_avg_loss_history = []
+        validation_loss_history = []
         batch_processed_count = 0
         trained_count = 0
         epoch_count = 0
@@ -647,8 +670,25 @@ class RnnWithNumpy:
 
         def _update_weights_and_do_callback():
             nonlocal batch_avg_loss, batch_processed_count, trained_count, epoch_count, start_time, sequential_loss_gradient_uvw_mini_batch, gradient_clipping_radius
-            logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f. Calling callback...",
-                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_avg_loss)
+            nonlocal validation_x_input_int_list_of_sequences, validation_y_label_int_list_of_sequences
+            nonlocal learning_rate, validation_loss_history, training_parameters
+
+            validation_set_loss = math.nan
+            if validation_x_input_int_list_of_sequences is not None:
+                validation_set_loss = RnnWithNumpy.evaluate_loss_against_dataset(self, validation_x_input_int_list_of_sequences, validation_y_label_int_list_of_sequences)
+                validation_loss_history.append(validation_set_loss)
+
+            learning_rate = _new_learning_rate_if_plataeu(
+                validation_loss_history if len(validation_loss_history) > 0 else batch_avg_loss_history,
+                learning_rate,
+                training_parameters['loss_plataeu_check_window'],
+                training_parameters['is_plataeu_criteria_ratio'],
+                training_parameters['min_batches_since_last_lr_adjustment'],
+                training_parameters['learning_rate_reduction_ratio_when_plataeu'])
+
+            logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f" +
+                ", validation set loss=%f, learning_rate=%f. Calling callback...",
+                trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_avg_loss, validation_set_loss, learning_rate)
 
             if (len(sequential_loss_gradient_uvw_mini_batch) > 0):
                 sequential_loss_gradient_uvw = _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch)
@@ -716,12 +756,6 @@ class RnnWithNumpy:
                 batch_avg_loss_history.append(batch_avg_loss)
                 batch_processed_count = len(training_outputs)
                 trained_count += len(training_outputs)
-                learning_rate = _new_learning_rate_if_plataeu(
-                    batch_avg_loss_history, learning_rate,
-                    training_parameters['loss_plataeu_check_window'],
-                    training_parameters['is_plataeu_criteria_ratio'],
-                    training_parameters['min_batches_since_last_lr_adjustment'],
-                    training_parameters['learning_rate_reduction_ratio_when_plataeu'])
                 _update_weights_and_do_callback()
 
             epoch_count += 1

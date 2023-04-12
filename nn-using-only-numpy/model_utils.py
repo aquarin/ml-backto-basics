@@ -19,31 +19,36 @@ logger = logging.getLogger(__name__)
 
 class ModelUtils:
     @staticmethod
-    def prepare_data(filepath, sequence_length, truncation=-1):
+    def prepare_data(filepath, sequence_length, truncation=-1, shuffle_data=False, percentage_val_set=-1):
         with open(filepath, 'rb') as f:
             text = f.read()
         text = text.decode('utf-8')
         text = text[:truncation]
 
-        return ModelUtils.prepare_data_from_text(text, sequence_length)
+        return ModelUtils.prepare_data_from_text(text, sequence_length, shuffle_data, percentage_val_set)
 
 
     @staticmethod
-    def save_model(model):
+    def save_model(model, char_to_id_map, id_to_char_map, description='No Description Provided'):
         filepath_template = './saved_numpy_models/model_%s.pkl'
         filepath = filepath_template % datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
 
         if not os.path.isdir("./saved_numpy_models"):
             os.makedirs("./saved_numpy_models")
 
-        with open(filepath, 'wb') as file:
-            pickle.dump(model, file)
+        saved_data = {
+            'model': model,
+            'char_to_id_map': char_to_id_map,
+            'id_to_char_map': char_to_id_map,
+            'description': description,
+        }
 
-        logger.info("Model saved to " + filepath)
+        with open(filepath, 'wb') as file:
+            pickle.dump(saved_data, file)
 
 
     @staticmethod
-    def prepare_data_from_text(text, sequence_length):
+    def prepare_data_from_text(text, sequence_length, shuffle_data=False, percentage_val_set=-1):
         # length of text is the number of characters in it
         logger.info(f'Length of text: {len(text)} characters')
 
@@ -53,14 +58,27 @@ class ModelUtils:
 
         logger.info('Started converting creating input/label sequences.')
         input_seqs, label_seqs = ModelUtils.text_to_list_of_sequences_split(text, sequence_length)
+        total_sample_size = len(input_seqs)
 
         input_id_seqs = ModelUtils.string_sequences_to_id_sequences(input_seqs, char_to_id_map)
         label_id_seqs = ModelUtils.string_sequences_to_id_sequences(label_seqs, char_to_id_map)
+        validation_input_id_seqs = None
+        validation_label_id_seqs = None
 
-        logger.info('Done converting creating input/label sequences. Training sample size=%d, vocab size=%d, sequence length=%d.',
-            len(input_id_seqs), len(vocab), sequence_length)
+        if shuffle_data:
+            input_id_seqs, label_id_seqs = ModelUtils.shuffle_training_data(input_id_seqs, label_id_seqs)
 
-        return vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs
+        if percentage_val_set > 0:
+            pivot_index = int(len(input_id_seqs) * (1 - percentage_val_set))
+            validation_input_id_seqs = input_id_seqs[pivot_index:]
+            validation_label_id_seqs = label_id_seqs[pivot_index:]
+            input_id_seqs = input_id_seqs[:pivot_index]
+            label_id_seqs = label_id_seqs[:pivot_index]
+
+        logger.info('Done converting creating input/label sequences. Total sample size=%d, Training sample size=%d, vocab size=%d, sequence length=%d.',
+            total_sample_size, len(input_id_seqs), len(vocab), sequence_length)
+
+        return vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_input_id_seqs, validation_label_id_seqs
 
 
     # In case of text generation, just use a fixed length for the training sequence

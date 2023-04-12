@@ -187,7 +187,7 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
             'gradient_clipping_radius': 1,
             'bptt_truncation_length': 10,
             'base_learning_rate': 0.003,
-            'mini_batch_size': 1,
+            'mini_batch_size': 20,
             'max_epoch': 200,
 
             # Learning Rate adjustments
@@ -235,8 +235,8 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         text_generation_prompt = 'ROMEO'
         sequence_length = 25
 
-        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
-            text=short_text, sequence_length=sequence_length)
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data_from_text(
+            text=short_text, sequence_length=sequence_length, shuffle_data=True, percentage_val_set=-1)
 
         dim_vocab = len(vocab)
 
@@ -246,7 +246,8 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=32)
 
         rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
-            training_parameters=training_parameters, batch_callback=_model_batch_callback)
+            training_parameters=training_parameters, batch_callback=_model_batch_callback,
+            validation_x_input_int_list_of_sequences=validation_inputs, validation_y_label_int_list_of_sequences=validation_labels)
 
 
     def test_longer_text_training(self):
@@ -269,8 +270,8 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         sequence_length = 45
         hidden_dim = 64
 
-        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
-            text=longer_text, sequence_length=35)
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels  = ModelUtils.prepare_data_from_text(
+            text=longer_text, sequence_length=35,  shuffle_data=True, percentage_val_set=.2)
 
         dim_vocab = len(vocab)
 
@@ -280,7 +281,8 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=hidden_dim)
 
         rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
-            training_parameters=training_parameters, batch_callback=_model_batch_callback)
+            training_parameters=training_parameters, batch_callback=_model_batch_callback,
+            validation_x_input_int_list_of_sequences=validation_inputs, validation_y_label_int_list_of_sequences=validation_labels)
 
 
     def test_continue_with_previous_model_short_training_data(self):
