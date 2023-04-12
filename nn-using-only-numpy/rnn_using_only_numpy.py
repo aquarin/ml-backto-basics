@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Can't put this as a member method when using ThreadWorkerPool.
 # https://stackoverflow.com/questions/17419879/why-i-cannot-use-python-module-concurrent-futures-in-class-method
-def thread_worker_method(args):
+def training_worker_method(args):
     def _get_thread_local_logger():
         local = threading.local()
         logger = getattr(local, 'logger', None)
@@ -611,9 +611,9 @@ class RnnWithNumpy:
 
         # TODO: abstract this out and make it a separate learning rate scheduler.
         def _new_learning_rate_if_plataeu(batch_loss_history, learning_rate):
-            comparison_moving_window_size = 20
-            is_plataeu_criteria = .95
-            min_calls_since_last_adjustment = 20
+            comparison_moving_window_size = 40
+            is_plataeu_criteria = 1.0
+            min_calls_since_last_adjustment = 40
             learning_rate_adjustment_ratio = .7
 
             _new_learning_rate_if_plataeu.calls_since_last_adjustment = getattr(_new_learning_rate_if_plataeu, 'calls_since_last_adjustment', -1)
@@ -650,7 +650,7 @@ class RnnWithNumpy:
                     input_x_int_sequence_mini_batch,
                     y_label_int_sequence_mini_batch)
 
-                training_outputs = list(executor.map(thread_worker_method, list(training_thread_inputs)))
+                training_outputs = list(executor.map(training_worker_method, list(training_thread_inputs)))
 
                 (sequential_losses, sequential_loss_gradient_uvw_mini_batch) = zip(*training_outputs)
 

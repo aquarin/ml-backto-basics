@@ -161,16 +161,16 @@ def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map,
 
 def test_simple_training():
     vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data(
-        filepath=text_file, sequence_length=40)
+        filepath=text_file, sequence_length=40, truncation=45000)
     dim_vocab = len(vocab)
 
     def _model_batch_callback(model):
-        model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
+        model_training_batch_callback(model, 'MARCIUS:', char_to_id_map, id_to_char_map, output_length=100)
 
     rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=80)
 
     rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
-        batch_size=40, max_epoch=4000, batch_callback=_model_batch_callback)
+        batch_size=10, max_epoch=4000, batch_callback=_model_batch_callback)
 
 
 def profile_training():
