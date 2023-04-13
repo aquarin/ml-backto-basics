@@ -161,7 +161,7 @@ def save_model(model):
 def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
     generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
     logger.info("Generated text=\n%s", generated_text)
-    save_model(model)
+    ModelUtils.save_model(model, char_to_id_map, id_to_char_map)
 
 
 def profile_training():
@@ -200,7 +200,7 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         }
 
         text_generation_prompt = 'MARCIUS'
-        sequence_length = 25
+        sequence_length = 55
         hidden_dim = 80
 
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data(
@@ -257,24 +257,24 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         training_parameters = {
             'thread_worker_count': 11,
             'gradient_clipping_radius': 1,
-            'bptt_truncation_length': 10,
-            'base_learning_rate': 0.003,
+            'bptt_truncation_length': 40,
+            'base_learning_rate': 0.005,
             'mini_batch_size': 11,
             'max_epoch': 200,
 
             # Learning Rate adjustments
-            'learning_rate_reduction_ratio_when_plataeu': .5,
-            'loss_plataeu_check_window': 20,
-            'min_batches_since_last_lr_adjustment': 40,
+            'learning_rate_reduction_ratio_when_plataeu': .6,
+            'loss_plataeu_check_window': 10,
+            'min_batches_since_last_lr_adjustment': 8,
             # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
-            'is_plataeu_criteria_ratio': 1.0
+            'is_plataeu_criteria_ratio': .99
         }
         text_generation_prompt = 'QUEEN'
-        sequence_length = 45
+        sequence_length = 20
         hidden_dim = 64
 
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels  = ModelUtils.prepare_data_from_text(
-            text=longer_text, sequence_length=35,  shuffle_data=True, percentage_val_set=.2)
+            text=longer_text, sequence_length=sequence_length,  shuffle_data=True, percentage_val_set=.1)
 
         dim_vocab = len(vocab)
 

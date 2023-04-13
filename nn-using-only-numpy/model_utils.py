@@ -39,12 +39,25 @@ class ModelUtils:
         saved_data = {
             'model': model,
             'char_to_id_map': char_to_id_map,
-            'id_to_char_map': char_to_id_map,
+            'id_to_char_map': id_to_char_map,
             'description': description,
         }
 
         with open(filepath, 'wb') as file:
             pickle.dump(saved_data, file)
+
+
+    def load_model_and_maps(filepath):
+        with open(filepath, 'rb') as file:
+            data = pickle.load(file)
+
+        (model, char_to_id_map, id_to_char_map, description) = (
+            data['model'],
+            data['char_to_id_map'],
+            data['id_to_char_map'],
+            data['description'])
+
+        return (model, char_to_id_map, id_to_char_map, description)
 
 
     @staticmethod

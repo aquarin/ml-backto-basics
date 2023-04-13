@@ -100,6 +100,7 @@ class RnnWithNumpy:
             'gradient_clipping_radius': -1,
             'bptt_truncation_length': 10,
             'base_learning_rate': 0.003,
+            'min_learning_rate': 0.0001,
             'mini_batch_size': 20,
             'max_epoch': 20,
 
@@ -754,7 +755,8 @@ class RnnWithNumpy:
                 training_parameters['loss_plataeu_check_window'],
                 training_parameters['is_plataeu_criteria_ratio'],
                 training_parameters['min_batches_since_last_lr_adjustment'],
-                training_parameters['learning_rate_reduction_ratio_when_plataeu'])
+                training_parameters['learning_rate_reduction_ratio_when_plataeu'],
+                training_parameters['min_learning_rate'])
 
             logger.info("Processed %d total training samples, speed=%f samples/sec. Epoch=%d, max epoch=%d, Last batch size = %d, last batch avg loss (rolling calculation) = %f" +
                 ", validation set loss=%f, learning_rate=%f. Calling callback...",
@@ -782,7 +784,7 @@ class RnnWithNumpy:
 
         # TODO: abstract this out and make it a separate learning rate scheduler.
         def _new_learning_rate_if_plataeu(batch_loss_history, learning_rate, comparison_moving_window_size, is_plataeu_criteria_ratio,
-            min_calls_since_last_adjustment, learning_rate_adjustment_ratio):
+            min_calls_since_last_adjustment, learning_rate_adjustment_ratio, min_learning_rate):
 
             _new_learning_rate_if_plataeu.calls_since_last_adjustment = getattr(_new_learning_rate_if_plataeu, 'calls_since_last_adjustment', -1)
             _new_learning_rate_if_plataeu.calls_since_last_adjustment += 1
@@ -797,7 +799,7 @@ class RnnWithNumpy:
             avg2 = np.average(batch_loss_history[- comparison_moving_window_size :])
 
             if avg2 > avg1 * is_plataeu_criteria_ratio:
-                new_learning_rate = learning_rate * learning_rate_adjustment_ratio
+                new_learning_rate = max(learning_rate * learning_rate_adjustment_ratio, min_learning_rate)
                 _new_learning_rate_if_plataeu.calls_since_last_adjustment = 0
 
                 logger.info("Adjusting learning rate to %f", new_learning_rate)
