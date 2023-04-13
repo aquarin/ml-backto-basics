@@ -511,9 +511,6 @@ class RnnWithNumpy:
             debug_output_dict['partial_prev_state_partial_matrix_w'] = partial_prev_state_partial_matrix_w
             debug_output_dict['partial_state_partial_w'] = partial_state_partial_w
 
-            with open('bptt_test_current_time_%d.pkl' % current_time, 'wb') as f:
-                pickle.dump(debug_output_dict, f)
-
         if print_debug:
             logger.debug('==================At current_time = %d:=================' % current_time)
             logger.debug(debug_output_dict)
@@ -671,7 +668,7 @@ class RnnWithNumpy:
 
         for i in range(4):
             gradient = loss_gradient_u_v_w[i]
-            p98 = np.quantile(gradient, .95)
+            p98 = np.quantile(gradient, .98)
             p02 = np.quantile(gradient, .02)
             avg = np.average(gradient)
             clipped_count = 0
