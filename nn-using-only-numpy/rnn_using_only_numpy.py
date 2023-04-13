@@ -49,18 +49,19 @@ def training_worker_method(args):
     forward_computation_intermediates_array = self.forward_sequence(
         input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
         matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+        bias_vector=self.bias_vector,
         start_state_vector=None, check_shapes=False, print_debug=False)
 
     sequential_loss = self.sequence_loss_from_forward_computations(
         dim_vocab=self.dim_vocab, forward_computation_intermediates_array=forward_computation_intermediates_array,
         label_y_int_array=y_label_int_sequence, check_shapes=False)
 
-    sequential_loss_gradient_uvw = (
-        self.sequence_loss_gradient_u_v_w(forward_computation_intermediates_array=forward_computation_intermediates_array,
+    sequential_loss_gradient_uvwb = (
+        self.sequence_loss_gradient_u_v_w_b(forward_computation_intermediates_array=forward_computation_intermediates_array,
             label_y_int_array=y_label_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
             bptt_truncation_len=training_parameters['bptt_truncation_length'], check_shapes=False))
 
-    return (sequential_loss, sequential_loss_gradient_uvw)
+    return (sequential_loss, sequential_loss_gradient_uvwb)
 
 
 class RnnWithNumpy:
@@ -81,6 +82,8 @@ class RnnWithNumpy:
         w_variance = math.sqrt(2.0 / dim_hidden)
         self.matrix_w = np.random.normal(0.0, w_variance, [dim_hidden, dim_hidden])
 
+        self.bias_vector = np.random.uniform(-0.01, 0.01, dim_hidden)
+
         # No hidden state vector here as member variable. That will be held in each training/prediction's
         # own function call variables.
         self.prev_state_vector = np.zeros(dim_hidden)
@@ -88,6 +91,7 @@ class RnnWithNumpy:
         self.adam_optimizer_u = AdamOptimizer(alpha=1) # Set learning rate to 1, later multiply the actual earning rate.
         self.adam_optimizer_v = AdamOptimizer(alpha=1)
         self.adam_optimizer_w = AdamOptimizer(alpha=1)
+        self.adam_optimizer_b = AdamOptimizer(alpha=1)
 
         self.thread_worker_count = 10 # TODO: parameterize this.
 
@@ -109,7 +113,7 @@ class RnnWithNumpy:
 
 
     @staticmethod
-    def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w, prev_state_vector,
+    def forward(input_x_as_integer, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w, bias_vector, prev_state_vector,
         check_shapes=True, print_debug=False):
         if check_shapes:
             assert isinstance(input_x_as_integer, numbers.Integral)
@@ -119,13 +123,14 @@ class RnnWithNumpy:
             assert matrix_u.shape[0] == dim_hidden and matrix_u.shape[1] == dim_vocab
             assert matrix_v.shape[0] == dim_vocab and matrix_v.shape[1] == dim_hidden
             assert matrix_w.shape[0] == matrix_w.shape[1] == dim_hidden
+            assert bias_vector.ndim == 1 and bias_vector.size == dim_hidden
             assert prev_state_vector.ndim == 1
             assert prev_state_vector.size == dim_hidden
             assert input_x_as_integer >= 0 and input_x_as_integer < dim_vocab
 
         matrix_u_times_x_onehot = matrix_u[:, input_x_as_integer]
         w_times_prev_state = np.matmul(matrix_w, prev_state_vector)
-        current_state_before_activation = matrix_u_times_x_onehot + w_times_prev_state
+        current_state_before_activation = matrix_u_times_x_onehot + w_times_prev_state + bias_vector
         current_state = np.tanh(current_state_before_activation)
         logits = np.matmul(matrix_v, current_state)
         softmax_probabilities = Utilities.softmax(logits)
@@ -153,7 +158,7 @@ class RnnWithNumpy:
 
     @staticmethod
     def forward_sequence(input_x_int_array, dim_vocab, dim_hidden, matrix_u, matrix_v, matrix_w,
-        start_state_vector=None, check_shapes=True, print_debug=False):
+        bias_vector, start_state_vector=None, check_shapes=True, print_debug=False):
         prev_state_vector = start_state_vector if start_state_vector is not None else np.zeros(dim_hidden)
 
         if check_shapes:
@@ -165,6 +170,7 @@ class RnnWithNumpy:
             assert matrix_w.shape[0] == matrix_w.shape[1] == dim_hidden
             assert prev_state_vector.ndim == 1
             assert prev_state_vector.size == dim_hidden
+            assert bias_vector.ndim == 1 and bias_vector.size == dim_hidden
 
         forward_computation_intermediates_array = []
 
@@ -175,8 +181,8 @@ class RnnWithNumpy:
 
             forward_computation_intermediates = RnnWithNumpy.forward(
                 input_x_as_integer=input_x_as_integer, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-                matrix_u=matrix_u, matrix_w=matrix_w, matrix_v=matrix_v, prev_state_vector=prev_state_vector,
-                check_shapes=check_shapes, print_debug=print_debug)
+                matrix_u=matrix_u, matrix_w=matrix_w, matrix_v=matrix_v, bias_vector=bias_vector,
+                prev_state_vector=prev_state_vector, check_shapes=check_shapes, print_debug=print_debug)
 
             forward_computation_intermediates_array.append(forward_computation_intermediates)
             prev_state_vector = forward_computation_intermediates['current_state']
@@ -223,6 +229,7 @@ class RnnWithNumpy:
         forward_computation_intermediates = self.forward(
             input_x_as_integer, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
             matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+            bias_vector=self.bias_vector,
             prev_state_vector=self.prev_state_vector,
             check_shapes=check_shapes, print_debug=False)
 
@@ -243,6 +250,7 @@ class RnnWithNumpy:
         forward_computation_intermediates_array = self.forward_sequence(
             input_x_int_array=input_x_int_sequence, dim_vocab=self.dim_vocab, dim_hidden=self.dim_hidden,
             matrix_u=self.matrix_u, matrix_v=self.matrix_v, matrix_w=self.matrix_w,
+            bias_vector=self.bias_vector,
             start_state_vector=None, check_shapes=check_shapes, print_debug=False)
 
         probabilities_time_series = list(map(lambda computed: computed['softmax_probabilities'], forward_computation_intermediates_array))
@@ -270,10 +278,11 @@ class RnnWithNumpy:
     # Computes the gradient of loss function at one input in a sequence. Due to bptt calculation, the whole sequence computation states should be
     # provided. But only current time's label y needs to be provided.
     @staticmethod
-    def loss_gradient_u_v_w(
+    def loss_gradient_u_v_w_b(
         current_time, forward_computation_intermediates_array, label_y_as_integer, dim_vocab, dim_hidden,
         partial_state_partial_u_by_time_bptt_cache,
         partial_state_partial_w_by_time_bptt_cache,
+        partial_state_partial_b_by_time_bptt_cache,
         bptt_truncation_len=10,
         check_shapes=True):
         assert isinstance(current_time, int) and current_time >= 0 and current_time < len(forward_computation_intermediates_array)
@@ -370,39 +379,56 @@ class RnnWithNumpy:
             # einsum to do this multiplication. TODO: probably I should fix the order of the indices of higher dimension jacobians later.
             else np.einsum('m,ijm->ij', partial_loss_partial_new_state, partial_state_partial_w))
 
+        partial_state_partial_b = RnnWithNumpy.bptt_partial_state_time_t_partial_bias_vector(
+            states_array_indexed_by_time=states_array_indexed_by_time, current_time=current_time,
+            dim_hidden=dim_hidden, matrix_w=matrix_w,
+            partial_state_partial_bias_vector_by_time_cache=partial_state_partial_b_by_time_bptt_cache,
+            truncation_len=bptt_truncation_len, check_shapes=check_shapes, debug_output_dict=None, print_debug=False)
+
+        # partial_loss_partial_b[i] = sum_m(partial_loss_partial_new_state[m] * partial_state_partial_b[m][i])
+        # So partial_loss_partial_b = einsum('m,mi->i', ...')
+        partial_loss_partial_b = np.einsum('m,mi->i', partial_loss_partial_new_state, partial_state_partial_b)
+
         if check_shapes:
             assert partial_loss_partial_w.shape == matrix_w.shape
+            assert partial_loss_partial_b.shape == (dim_hidden, )
 
-        return (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w)
+        return (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w, partial_loss_partial_b)
 
 
     @staticmethod
-    def sequence_loss_gradient_u_v_w(forward_computation_intermediates_array,
+    def sequence_loss_gradient_u_v_w_b(forward_computation_intermediates_array,
         label_y_int_array, dim_vocab, dim_hidden, bptt_truncation_len=10, check_shapes=True):
         assert len(forward_computation_intermediates_array) == len(label_y_int_array)
 
         partial_sequential_loss_partial_u = 0
         partial_sequential_loss_partial_v = 0
         partial_sequential_loss_partial_w = 0
+        partial_sequential_loss_partial_b = 0
 
         partial_state_partial_u_by_time_bptt_cache = {}
         partial_state_partial_w_by_time_bptt_cache = {}
+        partial_state_partial_b_by_time_bptt_cache = {}
 
         for t in range(len(forward_computation_intermediates_array)):
-            (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.loss_gradient_u_v_w(
+            (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w,
+                partial_loss_partial_bias) = RnnWithNumpy.loss_gradient_u_v_w_b(
                 current_time=t,
                 forward_computation_intermediates_array=forward_computation_intermediates_array,
                 label_y_as_integer=label_y_int_array[t], dim_vocab=dim_vocab, dim_hidden=dim_hidden,
                 partial_state_partial_u_by_time_bptt_cache=partial_state_partial_u_by_time_bptt_cache,
                 partial_state_partial_w_by_time_bptt_cache=partial_state_partial_w_by_time_bptt_cache,
+                partial_state_partial_b_by_time_bptt_cache=partial_state_partial_b_by_time_bptt_cache,
                 bptt_truncation_len=bptt_truncation_len,
                 check_shapes=check_shapes)
 
             partial_sequential_loss_partial_u += partial_loss_partial_u / float(len(forward_computation_intermediates_array))
             partial_sequential_loss_partial_v += partial_loss_partial_v / float(len(forward_computation_intermediates_array))
             partial_sequential_loss_partial_w += partial_loss_partial_w / float(len(forward_computation_intermediates_array))
+            partial_sequential_loss_partial_b += partial_loss_partial_bias / float(len(forward_computation_intermediates_array))
 
-        return (partial_sequential_loss_partial_u, partial_sequential_loss_partial_v, partial_sequential_loss_partial_w)
+        return (partial_sequential_loss_partial_u,
+            partial_sequential_loss_partial_v, partial_sequential_loss_partial_w, partial_sequential_loss_partial_b)
 
 
     # Returns a Jacobian matrix of partial(state_vector@time_t) / partial(matrix_w)
@@ -526,7 +552,6 @@ class RnnWithNumpy:
         # d(tanh)/d(x) = 1/(cosh(x)^2) = 1 - tanh(x)) ^ 2
         partial_state_partial_raw_state = np.diag(1 - current_state ** 2)
 
-
         x_onehot = np.zeros(dim_vocab).reshape(-1, 1)
         x_onehot[input_x_as_integer] = 1.0
 
@@ -557,48 +582,93 @@ class RnnWithNumpy:
             partial_state_partial_raw_state,
             partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
 
-        '''
-        partial_state_partial_matrix_u = np.matmul(partial_state_partial_raw_state,
-            partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
-        '''
-
         partial_state_partial_u_by_time_cache[current_time] = partial_state_partial_matrix_u
         return partial_state_partial_matrix_u
 
 
+    # See my notes how the recursive calculation of this one.
+    @staticmethod
+    def bptt_partial_state_time_t_partial_bias_vector(states_array_indexed_by_time, current_time, dim_hidden,
+        matrix_w, partial_state_partial_bias_vector_by_time_cache,
+        truncation_len=10, check_shapes=True, debug_output_dict=None, print_debug=False):
+
+        assert isinstance(partial_state_partial_bias_vector_by_time_cache, dict)
+        assert current_time < len(states_array_indexed_by_time)
+
+        if check_shapes:
+            assert matrix_w.shape == (dim_hidden, dim_hidden)
+
+        if truncation_len <= 0 or current_time <= -1:
+            # The down-stream code will handle this 0, so that I wouldn't need to return a shape-aligned zero matrix.
+            return 0
+
+        if current_time in partial_state_partial_bias_vector_by_time_cache:
+            return partial_state_partial_bias_vector_by_time_cache[current_time]
+
+        current_state = states_array_indexed_by_time[current_time]
+
+        # d(tanh)/d(x) = 1/(cosh(x)^2) = 1 - tanh(x)) ^ 2
+        # TODO: this is calculated in several bptt methods, unite them.
+        partial_state_partial_raw_state = np.diag(1 - current_state ** 2)
+
+        partial_state_t_minus_1_partial_bias = RnnWithNumpy.bptt_partial_state_time_t_partial_bias_vector(
+            states_array_indexed_by_time=states_array_indexed_by_time, current_time=current_time-1,
+            dim_hidden=dim_hidden, matrix_w=matrix_w,
+            partial_state_partial_bias_vector_by_time_cache=partial_state_partial_bias_vector_by_time_cache,
+            truncation_len=truncation_len-1,check_shapes=check_shapes, debug_output_dict=debug_output_dict,
+            print_debug=print_debug)
+
+        # See my notes. Partial(state_t)/partial(bias) =
+        # diag(1 - s_i ** 2) * (0 + partial(W * state_t_minus_1)/partial(bias) + I)
+        # TODO: the multiplicaiton with a diagonal matrix can be optimized here.
+        partial_state_partial_bias = np.matmul(partial_state_partial_raw_state,
+            (0 if (np.isscalar(partial_state_t_minus_1_partial_bias) and partial_state_t_minus_1_partial_bias == 0)
+                else np.einsum('im,mj->ij', matrix_w, partial_state_t_minus_1_partial_bias) )
+            + np.eye(dim_hidden))
+
+        partial_state_partial_bias_vector_by_time_cache[current_time] = partial_state_partial_bias
+
+        return partial_state_partial_bias
+
+
     # Only the very very primitive SGD. Not even having adapting learning rate. Should improve this later.
     # Step size is not used for now. Only relying on adam optimizer.
-    def step_parameters(self, loss_gradient_u_v_w, step_size, check_shapes=True, gradient_clipping_radius=-1):
-        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = loss_gradient_u_v_w
+    def step_parameters(self, loss_gradient_u_v_w_b, step_size, check_shapes=True, gradient_clipping_radius=-1):
+        (partial_loss_partial_u,
+            partial_loss_partial_v, partial_loss_partial_w, partial_loss_partial_b) = loss_gradient_u_v_w_b
         if check_shapes:
             assert partial_loss_partial_u.shape == self.matrix_u.shape
             assert partial_loss_partial_v.shape == self.matrix_v.shape
             assert partial_loss_partial_w.shape == self.matrix_w.shape
+            assert partial_loss_partial_b.shape == self.bias_vector.shape
 
-        self.monitor_gradients(loss_gradient_u_v_w, gradient_clipping_radius)
+        self.monitor_gradients(loss_gradient_u_v_w_b, gradient_clipping_radius)
 
         # TODO: probably add some gradient monitorings here.
         if gradient_clipping_radius > 0:
             partial_loss_partial_u = np.clip(partial_loss_partial_u, -gradient_clipping_radius, gradient_clipping_radius)
             partial_loss_partial_v = np.clip(partial_loss_partial_v, -gradient_clipping_radius, gradient_clipping_radius)
             partial_loss_partial_w = np.clip(partial_loss_partial_w, -gradient_clipping_radius, gradient_clipping_radius)
+            partial_loss_partial_b = np.clip(partial_loss_partial_b, -gradient_clipping_radius, gradient_clipping_radius)
 
         suggested_delta_u = self.adam_optimizer_u.suggest_delta_x_from_graident(partial_loss_partial_u)
         suggested_delta_v = self.adam_optimizer_v.suggest_delta_x_from_graident(partial_loss_partial_v)
         suggested_delta_w = self.adam_optimizer_w.suggest_delta_x_from_graident(partial_loss_partial_w)
+        suggested_delta_b = self.adam_optimizer_b.suggest_delta_x_from_graident(partial_loss_partial_b)
 
         # Multiplying step_size (same as learning rate) here, is equal to using that step_size as "alpha" inside the ADAM.
         self.matrix_u += suggested_delta_u * step_size
         self.matrix_v += suggested_delta_v * step_size
         self.matrix_w += suggested_delta_w * step_size
+        self.bias_vector += suggested_delta_b * step_size
 
 
     # TODO: move this method into a separate util class?
     @staticmethod
     def monitor_gradients(loss_gradient_u_v_w, gradient_clipping_radius):
-        gradient_names = ['u', 'v', 'w']
+        gradient_names = ['u', 'v', 'w', 'bias']
 
-        for i in range(3):
+        for i in range(4):
             gradient = loss_gradient_u_v_w[i]
             p98 = np.quantile(gradient, .95)
             p02 = np.quantile(gradient, .02)
@@ -665,11 +735,11 @@ class RnnWithNumpy:
         trained_count = 0
         epoch_count = 0
         start_time = time.time()
-        sequential_loss_gradient_uvw_mini_batch = []
+        sequential_loss_gradient_uvwb_mini_batch = []
         executor = concurrent.futures.ProcessPoolExecutor(max_workers=thread_worker_count) # TODO: parameterize this.
 
         def _update_weights_and_do_callback():
-            nonlocal batch_avg_loss, batch_processed_count, trained_count, epoch_count, start_time, sequential_loss_gradient_uvw_mini_batch, gradient_clipping_radius
+            nonlocal batch_avg_loss, batch_processed_count, trained_count, epoch_count, start_time, sequential_loss_gradient_uvwb_mini_batch, gradient_clipping_radius
             nonlocal validation_x_input_int_list_of_sequences, validation_y_label_int_list_of_sequences
             nonlocal learning_rate, validation_loss_history, training_parameters
 
@@ -690,10 +760,10 @@ class RnnWithNumpy:
                 ", validation set loss=%f, learning_rate=%f. Calling callback...",
                 trained_count, trained_count / (time.time() - start_time), epoch_count, max_epoch, batch_processed_count, batch_avg_loss, validation_set_loss, learning_rate)
 
-            if (len(sequential_loss_gradient_uvw_mini_batch) > 0):
-                sequential_loss_gradient_uvw = _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvw_mini_batch)
-                sequential_loss_gradient_uvw_mini_batch = []
-                self.step_parameters(loss_gradient_u_v_w=sequential_loss_gradient_uvw, step_size=learning_rate, check_shapes=False, gradient_clipping_radius=gradient_clipping_radius)
+            if (len(sequential_loss_gradient_uvwb_mini_batch) > 0):
+                sequential_loss_gradient_uvwb = _mini_batch_gradient_to_avg_gradient(sequential_loss_gradient_uvwb_mini_batch)
+                sequential_loss_gradient_uvwb_mini_batch = []
+                self.step_parameters(loss_gradient_u_v_w_b=sequential_loss_gradient_uvwb, step_size=learning_rate, check_shapes=False, gradient_clipping_radius=gradient_clipping_radius)
 
             if batch_callback is not None:
                 batch_callback(self)
@@ -705,8 +775,9 @@ class RnnWithNumpy:
             gradient_u = np.average(list(map(lambda tuple: tuple[0], sequential_loss_gradient_uvw_mini_batch)), axis=0)
             gradient_v = np.average(list(map(lambda tuple: tuple[1], sequential_loss_gradient_uvw_mini_batch)), axis=0)
             gradient_w = np.average(list(map(lambda tuple: tuple[2], sequential_loss_gradient_uvw_mini_batch)), axis=0)
+            gradient_b = np.average(list(map(lambda tuple: tuple[3], sequential_loss_gradient_uvw_mini_batch)), axis=0)
 
-            return (gradient_u, gradient_v, gradient_w)
+            return (gradient_u, gradient_v, gradient_w, gradient_b)
 
 
         # TODO: abstract this out and make it a separate learning rate scheduler.
@@ -750,7 +821,7 @@ class RnnWithNumpy:
 
                 training_outputs = list(executor.map(training_worker_method, list(training_thread_inputs)))
 
-                (sequential_losses, sequential_loss_gradient_uvw_mini_batch) = zip(*training_outputs)
+                (sequential_losses, sequential_loss_gradient_uvwb_mini_batch) = zip(*training_outputs)
 
                 batch_avg_loss = np.average(sequential_losses)
                 batch_avg_loss_history.append(batch_avg_loss)

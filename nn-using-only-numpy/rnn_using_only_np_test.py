@@ -38,6 +38,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             [.4, .5, .6],
             [.7, .8, .9],
         ]) - .5,
+        'bias_vector': np.array([.03, .06, .09]),
         'delta_x_scalar': 1e-5
     }
 
@@ -57,6 +58,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         ]),
         # Sorted of wanted: previous state "equally" carried to the next state.
         'matrix_w': np.eye(3),
+        'bias_vector': np.array([.03, .06, .09]),
     }
 
     # A simplified forward process just to verify the bptt. In this forwarding, there is no logits, softmax, matrix V, involved.
@@ -342,11 +344,12 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             [0., 1.5, 7],
             [4, 5, 1],
         ]) / 30
+        bias_vector = np.array([.03, 0.06, .09])
         input_x_integers_by_time = [1]
 
         forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
             input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w, bias_vector=bias_vector,
             start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
 
         logger.debug(forward_computation_intermediates_array)
@@ -355,7 +358,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         prev_state = state_vector_time_negative_1
         assert len(forward_computation_intermediates_array) == len(input_x_integers_by_time)
         for t in range(len(input_x_integers_by_time)):
-            state_vector = np.tanh(np.matmul(matrix_w, prev_state) + matrix_u[:, input_x_integers_by_time[t]])
+            state_vector = np.tanh(np.matmul(matrix_w, prev_state) + matrix_u[:, input_x_integers_by_time[t]] + bias_vector)
 
             logger.debug('t=%d, prev_state=%s, state_vector=%s, forward_computation_intermediates[][current_state]=%s, forward_computation_intermediates[][prev_state_vector]=%s'
                 %(t, prev_state, state_vector, forward_computation_intermediates_array[t]['current_state'], forward_computation_intermediates_array[t]['prev_state_vector']))
@@ -389,11 +392,13 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             [0., 1.5, 7],
             [4, 5, 1],
         ]) / 30
+        bias_vector = np.array([.05, .10, .15])
         input_x_integers_by_time = [1, 3, 0, 1, 2, 0, 2, 2]
 
         forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
             input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            bias_vector=bias_vector,
             start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
 
         logger.debug(forward_computation_intermediates_array)
@@ -401,7 +406,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         prev_state = state_vector_time_negative_1
         assert len(forward_computation_intermediates_array) == len(input_x_integers_by_time)
         for t in range(len(input_x_integers_by_time)):
-            state_vector = np.tanh(np.matmul(matrix_w, prev_state) + matrix_u[:, input_x_integers_by_time[t]])
+            state_vector = np.tanh(np.matmul(matrix_w, prev_state) + matrix_u[:, input_x_integers_by_time[t]] + bias_vector)
 
             logger.debug('t=%d, prev_state=%s, state_vector=%s, forward_computation_intermediates[][current_state]=%s, forward_computation_intermediates[][prev_state_vector]=%s'
                 %(t, prev_state, state_vector, forward_computation_intermediates_array[t]['current_state'], forward_computation_intermediates_array[t]['prev_state_vector']))
@@ -439,17 +444,18 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
 
 
     @staticmethod
-    def verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
+    def verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w, bias_vector,
         input_x_integers_by_time, label_y_int_by_time):
 
         state_vector_time_negative_1 = np.zeros(dim_hidden)
 
         forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
             input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w,
+            matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w, bias_vector=bias_vector,
             start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
 
-        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.sequence_loss_gradient_u_v_w(
+        (partial_loss_partial_u, partial_loss_partial_v,
+            partial_loss_partial_w, partial_loss_partial_b) = RnnWithNumpy.sequence_loss_gradient_u_v_w_b(
             forward_computation_intermediates_array=forward_computation_intermediates_array,
             label_y_int_array=label_y_int_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             bptt_truncation_len=10, check_shapes=True)
@@ -458,7 +464,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         def _loss_as_function_of_matrix_u(matrix_u_func):
             computed_intermediaries_array = RnnWithNumpy.forward_sequence(
                 input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-                matrix_u=matrix_u_func, matrix_v=matrix_v, matrix_w=matrix_w,
+                matrix_u=matrix_u_func, matrix_v=matrix_v, matrix_w=matrix_w, bias_vector=bias_vector,
                 start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
             total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
                 dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
@@ -467,7 +473,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         def _loss_as_function_of_matrix_v(matrix_v_func):
             computed_intermediaries_array = RnnWithNumpy.forward_sequence(
                 input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-                matrix_u=matrix_u, matrix_v=matrix_v_func, matrix_w=matrix_w,
+                matrix_u=matrix_u, matrix_v=matrix_v_func, matrix_w=matrix_w, bias_vector=bias_vector,
                 start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
             total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
                 dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
@@ -476,7 +482,16 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         def _loss_as_function_of_matrix_w(matrix_w_func):
             computed_intermediaries_array = RnnWithNumpy.forward_sequence(
                 input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
-                matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w_func,
+                matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w_func, bias_vector=bias_vector,
+                start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
+            total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
+                dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
+                label_y_int_array=label_y_int_by_time, check_shapes=True)
+            return total_loss
+        def _loss_as_function_of_bias(bias_vector_func):
+            computed_intermediaries_array = RnnWithNumpy.forward_sequence(
+                input_x_int_array=input_x_integers_by_time, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
+                matrix_u=matrix_u, matrix_v=matrix_v, matrix_w=matrix_w, bias_vector=bias_vector_func,
                 start_state_vector=state_vector_time_negative_1, check_shapes=False, print_debug=False)
             total_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
                 dim_vocab=dim_vocab, forward_computation_intermediates_array=computed_intermediaries_array,
@@ -501,17 +516,25 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         logger.debug("partial_loss_partial_w=\n%s\n", partial_loss_partial_w)
         logger.debug("numerical_partial_loss_partial_w=\n%s\n", numerical_partial_loss_partial_w)
 
+        numerical_partial_loss_partial_b = DerivativeVerifier.numerical_jacobian_diff_matrix(
+            func=_loss_as_function_of_bias,
+            matrix_x_0=bias_vector, delta_x_scalar=delta_x) / delta_x
+        logger.debug("partial_loss_partial_b=\n%s\n", partial_loss_partial_b)
+        logger.debug("numerical_partial_loss_partial_b=\n%s\n", numerical_partial_loss_partial_b)
+
         np.testing.assert_almost_equal(partial_loss_partial_u, numerical_partial_loss_partial_u, 2)
         np.testing.assert_almost_equal(partial_loss_partial_v, numerical_partial_loss_partial_v, 2)
         np.testing.assert_almost_equal(partial_loss_partial_w, numerical_partial_loss_partial_w, 2)
+        np.testing.assert_almost_equal(partial_loss_partial_b, numerical_partial_loss_partial_b, 2)
 
 
-    def test_gradient_uvw_single_step(self):
+    def test_gradient_uvwb_single_step(self):
         dim_hidden = self.common_test_params['dim_hidden']
         dim_vocab = self.common_test_params['dim_vocab']
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = self.common_test_params['matrix_w']
+        bias_vector = self.common_test_params['bias_vector']
         input_x_integers_by_time = [3]
         label_y_int_array = [0]
 
@@ -520,7 +543,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
                 input_x_integers_by_time = [x_int]
                 label_y_int_array = [y_int]
                 self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
-                    input_x_integers_by_time, label_y_int_array)
+                    bias_vector, input_x_integers_by_time, label_y_int_array)
 
 
     def test_gradient_uvw_two_steps(self):
@@ -529,11 +552,12 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = self.common_test_params['matrix_w']
+        bias_vector = self.common_test_params['bias_vector']
         input_x_integers_by_time = [1, 1]
         label_y_int_array = [0, 0]
 
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
-            input_x_integers_by_time, label_y_int_array)
+            bias_vector, input_x_integers_by_time, label_y_int_array)
 
 
     # Debug why /partial_u is incorrect when sequence length >= 2, but correct when sequence length == 1
@@ -543,11 +567,12 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = np.zeros([dim_hidden, dim_hidden])
+        bias_vector = self.common_test_params['bias_vector']
         input_x_integers_by_time = [1, 1]
         label_y_int_array = [0, 0]
 
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
-            input_x_integers_by_time, label_y_int_array)
+            bias_vector, input_x_integers_by_time, label_y_int_array)
 
     def test_gradient_uvw_three_steps(self):
         dim_hidden = self.common_test_params['dim_hidden']
@@ -555,11 +580,12 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = self.common_test_params['matrix_w']
+        bias_vector = self.common_test_params['bias_vector']
         input_x_integers_by_time = [1, 0, 3]
         label_y_int_array = [1, 0, 3]
 
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
-            input_x_integers_by_time, label_y_int_array)
+            bias_vector, input_x_integers_by_time, label_y_int_array)
 
     def test_gradient_uvw_sequence_length_n(self):
         dim_hidden = self.common_test_params['dim_hidden']
@@ -567,11 +593,12 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         matrix_u = self.common_test_params['matrix_u']
         matrix_v = self.common_test_params['matrix_v']
         matrix_w = self.common_test_params['matrix_w']
+        bias_vector = self.common_test_params['bias_vector']
         input_x_integers_by_time = [1, 0, 3, 1, 2, 3]
         label_y_int_array = [1, 0, 3, 1, 2, 1]
 
         self.verify_gradient(dim_hidden, dim_vocab, matrix_u,  matrix_v, matrix_w,
-            input_x_integers_by_time, label_y_int_array)
+            bias_vector, input_x_integers_by_time, label_y_int_array)
 
 
     def test_predict_sequence(self):
@@ -579,6 +606,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         model.matrix_u = self.prediction_test_params['matrix_u']
         model.matrix_v = self.prediction_test_params['matrix_v']
         model.matrix_w = self.prediction_test_params['matrix_w']
+        model.bias_vector = self.prediction_test_params['bias_vector']
 
         input_id_seq = [0, 1, 2, 3, 0, 1, 2, 3]
         predicted_ids = model.predict_sequence(input_x_int_sequence=input_id_seq, check_shapes=True)
@@ -587,7 +615,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
 
         prev_state = np.zeros(3)
         for index, input_x_int in enumerate(input_id_seq):
-            state = np.tanh(model.matrix_u[:, input_x_int] + np.matmul(model.matrix_w, prev_state))
+            state = np.tanh(model.matrix_u[:, input_x_int] + np.matmul(model.matrix_w, prev_state) + model.bias_vector)
             logits = np.matmul(model.matrix_v, state)
             logger.info('step %d: state=%s, logits=%s, predicted_id=%d', index, state, logits, predicted_ids[index])
             np.testing.assert_equal(logits[predicted_ids[index]], np.max(logits))
@@ -602,6 +630,7 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         model.matrix_u = self.prediction_test_params['matrix_u']
         model.matrix_v = self.prediction_test_params['matrix_v']
         model.matrix_w = self.prediction_test_params['matrix_w']
+        model.bias_vector = self.prediction_test_params['bias_vector']
         state_vector_time_negative_1 = np.zeros(dim_hidden)
 
         input_id_seq = [0, 1, 2, 3, 0, 1, 2, 3]
@@ -610,14 +639,17 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         forward_computation_intermediates_array = RnnWithNumpy.forward_sequence(
             input_x_int_array=input_id_seq, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             matrix_u=model.matrix_u, matrix_v=model.matrix_v, matrix_w=model.matrix_w,
+            bias_vector=model.bias_vector,
             start_state_vector=state_vector_time_negative_1, check_shapes=True, print_debug=True)
 
-        (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w) = RnnWithNumpy.sequence_loss_gradient_u_v_w(
+        (partial_loss_partial_u, partial_loss_partial_v,
+            partial_loss_partial_w, partial_loss_partial_b) = RnnWithNumpy.sequence_loss_gradient_u_v_w_b(
             forward_computation_intermediates_array=forward_computation_intermediates_array,
             label_y_int_array=expected_output_seq, dim_vocab=dim_vocab, dim_hidden=dim_hidden,
             bptt_truncation_len=10, check_shapes=True)
 
-        model.step_parameters((partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w),
+        model.step_parameters(
+            (partial_loss_partial_u, partial_loss_partial_v, partial_loss_partial_w, partial_loss_partial_b),
             step_size=1e-5, check_shapes=True)
 
 
@@ -758,7 +790,6 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
             sum_B = np.einsum('km,ijm->ijk', w_0, _partial_s_partial_w(w_0))
 
             return sum_A + sum_B
-
 
         w_0 = np.zeros(9).reshape([3, 3])
         _compare_numerical_vs_theoretical_derivative(_s, _partial_s_partial_w, w_0)
