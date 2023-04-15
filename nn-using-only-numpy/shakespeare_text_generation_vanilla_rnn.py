@@ -159,7 +159,7 @@ def save_model(model):
 
 
 def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
-    generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
+    generated_text = ModelUtils.generate_text_beam_search(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
     logger.info("Generated text=\n%s", generated_text)
     ModelUtils.save_model(model, char_to_id_map, id_to_char_map)
 
