@@ -9,9 +9,11 @@ import math
 import numpy as np
 import os
 import pickle
+import unittest
 import time
 
 import rnn_using_only_numpy
+from rnn_using_only_numpy import RnnWithNumpy
 
 
 logger = logging.getLogger(__name__)
@@ -203,6 +205,64 @@ class ModelUtils:
 
 
     @staticmethod
+    def generate_text_beam_search(model, prompt, char_to_id_map, id_to_char_map, output_length=100,
+        expansion_per_item=4, queue_truncation_per_round=15, print_debug=False):
+        model.reset_prev_state()
+
+        prompt_input_ids = ModelUtils.char_array_to_id_array(prompt, char_to_id_map)
+        result_ids = prompt_input_ids.copy()
+        for input_id in prompt_input_ids[:-1]:
+            output_id = model.forward_and_predict_carry_state(input_id)
+
+        queue = []
+        new_queue = []
+
+        # queue item = (model_prev_state, token_list, next_input_id, probility_product)
+        seed_queue_item = (model.prev_state_vector, prompt_input_ids[:-1], prompt_input_ids[-1], 1.0)
+        queue.append(seed_queue_item)
+
+        for round in range(output_length):
+            for queue_item in queue:
+                (prev_state, token_list, next_input_id, probability_product) = queue_item
+                forward_computation_intermediates = RnnWithNumpy.forward(
+                    input_x_as_integer=next_input_id, dim_vocab=model.dim_vocab,
+                    dim_hidden=model.dim_hidden, matrix_u=model.matrix_u, matrix_v=model.matrix_v,
+                    matrix_w=model.matrix_w, bias_vector=model.bias_vector, prev_state_vector=prev_state,
+                    check_shapes=True, print_debug=False)
+                softmax_probs = forward_computation_intermediates['softmax_probabilities']
+                top_k_indices = np.argpartition(softmax_probs, -expansion_per_item)[-expansion_per_item:]
+
+                for top_result_index in top_k_indices:
+                    new_queue_item = (
+                        forward_computation_intermediates['current_state'],
+                        token_list + [next_input_id],
+                        top_result_index,
+                        probability_product * softmax_probs[top_result_index])
+                    new_queue.append(new_queue_item)
+
+                    if print_debug:
+                        logger.debug("Enqueued: %s, probability_product=%f",
+                            ''.join(ModelUtils.id_array_to_char_array(new_queue[-1][1] + [new_queue[-1][2]], id_to_char_map)),
+                            new_queue[-1][3])
+
+            # Truncate the queue.
+            new_queue = sorted(new_queue, key=lambda item: item[3])
+            new_queue = new_queue[-queue_truncation_per_round:]
+
+            if print_debug:
+                logger.debug("After queue truncation, queue=%s", new_queue)
+
+            queue = new_queue
+            new_queue = []
+
+        best_result_id_sequence = queue[-1][1] + [queue[-1][2]]
+
+        results = ModelUtils.id_array_to_char_array(best_result_id_sequence, id_to_char_map)
+        results = ''.join(results)
+        return results
+
+
+    @staticmethod
     def shuffle_training_data(input_id_seqs, label_id_seqs):
         assert len(input_id_seqs) == len(label_id_seqs)
         logger.info('Started shuffling training data.')
@@ -221,3 +281,34 @@ class ModelUtils:
 
         return shuffled_input_id_seqs, shuffled_label_id_seqs
 
+
+class ModelUtilsTest(unittest.TestCase):
+    def test_beam_search(self):
+        (model, char_to_id_map, id_to_char_map, desc) = ModelUtils.load_model_and_maps('models_to_keep/shakespeare_dim_64_model_2023_04_13_13_15_49.pkl')
+        
+        generated_text = ModelUtils.generate_text_beam_search(model, 'KING', char_to_id_map, id_to_char_map, output_length=40, print_debug=False)
+        logger.debug("Beam Search Generated text=\n%s", generated_text)
+
+
+    def test_text_generation(self):
+        (model, char_to_id_map, id_to_char_map, desc) = ModelUtils.load_model_and_maps('models_to_keep/shakespeare_dim_64_model_2023_04_13_13_15_49.pkl')
+        generated_text = ModelUtils.generate_text(model, 'KING', char_to_id_map, id_to_char_map, output_length=40)
+        logger.debug("Greedy Generated text=\n%s", generated_text)
+
+
+    def compare_beam_search_and_greedy(self):
+        prompt = 'KING'
+        output_length=50
+        (model, char_to_id_map, id_to_char_map, desc) = ModelUtils.load_model_and_maps('saved_numpy_models/model_2023_04_15_21_50_46.pkl')
+
+        generated_text = ModelUtils.generate_text_beam_search(model, prompt, char_to_id_map, id_to_char_map, output_length=output_length, print_debug=False)
+        logger.debug("Beam Search Generated text=\n%s", generated_text)
+        generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=output_length)
+        logger.debug("Greedy Generated text=\n%s", generated_text)
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    unittest.main()
