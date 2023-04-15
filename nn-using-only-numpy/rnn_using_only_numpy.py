@@ -358,9 +358,9 @@ class RnnWithNumpy:
             # Why not (dim_hidden, dim_vocab, 1, dim_hidden) (a 2d matrix of column vectors)? Because I have messed up the transposition in somewhere.
             assert partial_state_partial_u.shape == (dim_hidden, dim_vocab, dim_hidden)
          
-        # Frankly, I don't totally understand the mechanism behind "i,ijkl->il". I want to do a multiplication between a row vector and a 3d matrix.
-        # I just figured this out by trial and error. Probably I should learn why this worked, when I have more time.
-        partial_loss_partial_u = np.einsum('k,ijk->ij', partial_loss_partial_new_state, partial_state_partial_u)
+        # np.allclose(np.matmul(b, a), np.einsum('k,ijk->ij', a, b)) == True.
+        # Originally, this equals to np.einsum('k,ijk->ij', partial_loss_partial_new_state, partial_state_partial_u)
+        partial_loss_partial_u = np.matmul(partial_state_partial_u, partial_loss_partial_new_state)
 
         if check_shapes:
             assert partial_loss_partial_u.shape == matrix_u.shape
@@ -378,7 +378,8 @@ class RnnWithNumpy:
         partial_loss_partial_w = (np.zeros([dim_hidden, dim_hidden]) if np.isscalar(partial_state_partial_w) and partial_state_partial_w == 0
             # My own crafted 3-dimensional "Jacobian" at element(i,j,m), meant partial(F_m)/partial(W_[i,j]). So I need to hand-write this 
             # einsum to do this multiplication. TODO: probably I should fix the order of the indices of higher dimension jacobians later.
-            else np.einsum('m,ijm->ij', partial_loss_partial_new_state, partial_state_partial_w))
+            # Originally: else np.einsum('m,ijm->ij', partial_loss_partial_new_state, partial_state_partial_w))
+            else np.matmul(partial_state_partial_w, partial_loss_partial_new_state) )
 
         partial_state_partial_b = RnnWithNumpy.bptt_partial_state_time_t_partial_bias_vector(
             states_array_indexed_by_time=states_array_indexed_by_time, current_time=current_time,
@@ -387,8 +388,7 @@ class RnnWithNumpy:
             truncation_len=bptt_truncation_len, check_shapes=check_shapes, debug_output_dict=None, print_debug=False)
 
         # partial_loss_partial_b[i] = sum_m(partial_loss_partial_new_state[m] * partial_state_partial_b[m][i])
-        # So partial_loss_partial_b = einsum('m,mi->i', ...')
-        partial_loss_partial_b = np.einsum('m,mi->i', partial_loss_partial_new_state, partial_state_partial_b)
+        partial_loss_partial_b = np.matmul(partial_state_partial_b.T, partial_loss_partial_new_state)
 
         if check_shapes:
             assert partial_loss_partial_w.shape == matrix_w.shape
@@ -494,9 +494,27 @@ class RnnWithNumpy:
         partial_state_raw_partial_w = partial_f_partial_param_1 + (
             0 if (
                 np.isscalar(partial_prev_state_partial_matrix_w) and partial_prev_state_partial_matrix_w == 0)
-            else np.einsum('km,ijm->ijk', partial_f_partial_param_2, partial_prev_state_partial_matrix_w))
+            # Equals to np.einsum('km,ijm->ijk', partial_f_partial_param_2, partial_prev_state_partial_matrix_w)
+            else np.matmul(partial_prev_state_partial_matrix_w, partial_f_partial_param_2.T))
 
-        partial_state_partial_w = np.einsum('km,ijm->ijk', diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
+        # Originally, partial_state_partial_w = np.einsum('km,ijm->ijk', diag_matrix_partial_state_partial_state_raw, partial_state_raw_partial_w)
+        # See my hand-written formula of this bptt for the einsum calculation. Also the einsum is converted into a matrix multiplication.
+        # See unit test test_convert_einsum_to_matmul
+        # np.einsum('km,ijm->ijk', matrix1, matrix2) == np.matmul(matrix2, matrix1.T), and I recorded the following 10x performance improvements:
+        '''
+        In [7]: matrix_a.shape
+        Out[7]: (5000, 7000)
+        In [8]: matrix_b.shape
+        Out[8]: (80, 100, 7000)
+
+        In [5]:  %time np.einsum('km,ijm->ijk', matrix_a, matrix_b)
+        CPU times: user 3min 35s, sys: 531 ms, total: 3min 35s
+        Wall time: 3min 36s
+        In [6]: %time np.matmul(matrix_b, matrix_a.T)
+        CPU times: user 22 s, sys: 644 ms, total: 22.6 s
+        Wall time: 3.82 s
+        '''
+        partial_state_partial_w = np.matmul(partial_state_raw_partial_w, diag_matrix_partial_state_partial_state_raw.T)
 
         if print_debug and debug_output_dict == None:
             # Just to avoid duplicate debug tracing code in below.
@@ -573,12 +591,20 @@ class RnnWithNumpy:
             # Why a transposition on matrix W here? I don't know. But putting a .T here makes things right.
             # I am so messed up with the matrix calculus thing now. There is no documents to look up to know the right
             # chain rules...
-            else np.einsum('ij,jkl->ikl', matrix_w.T, partial_state_t_minus_1_partial_u))
+            # np.einsum('ij,jkl->ikl', matrix_w.T, partial_state_t_minus_1_partial_u)) == np.matmul(a, b.transpose(1, 0, 2)).transpose(1, 0, 2)
+            else np.matmul(matrix_w.T, partial_state_t_minus_1_partial_u.transpose(1, 0, 2)).transpose(1, 0, 2))
 
         # assert np.sahpe(w_mul_partial_state_minus_1_partial_u.shape) in ((), ())
-        partial_state_partial_matrix_u = np.einsum('ij,jkl->ikl', 
-            partial_state_partial_raw_state,
-            partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
+        ''' Originally:
+            partial_state_partial_matrix_u = np.einsum('ij,jkl->ikl',
+                partial_state_partial_raw_state,
+                partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u)
+            and einsum('ij,ijkl->ikl', a, b) == np.matmul(a, b.transpose(1, 0, 2)).tranpose(1, 0, 2)
+        '''
+        partial_state_partial_matrix_u = np.matmul(
+                partial_state_partial_raw_state,
+                (partial_u_times_x_onehot_partial_u + w_mul_partial_state_minus_1_partial_u).transpose(1, 0, 2)
+            ).transpose(1, 0, 2)
 
         partial_state_partial_u_by_time_cache[current_time] = partial_state_partial_matrix_u
         return partial_state_partial_matrix_u
@@ -621,7 +647,7 @@ class RnnWithNumpy:
         # TODO: the multiplicaiton with a diagonal matrix can be optimized here.
         partial_state_partial_bias = np.matmul(partial_state_partial_raw_state,
             (0 if (np.isscalar(partial_state_t_minus_1_partial_bias) and partial_state_t_minus_1_partial_bias == 0)
-                else np.einsum('im,mj->ij', matrix_w, partial_state_t_minus_1_partial_bias) )
+                else np.matmul(matrix_w, partial_state_t_minus_1_partial_bias) )
             + np.eye(dim_hidden))
 
         partial_state_partial_bias_vector_by_time_cache[current_time] = partial_state_partial_bias

@@ -255,11 +255,11 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
     def test_longer_text_training(self):
         training_parameters = {
-            'thread_worker_count': 11,
+            'thread_worker_count': 2,
             'gradient_clipping_radius': 1,
             'bptt_truncation_length': 40,
             'base_learning_rate': 0.005,
-            'mini_batch_size': 11,
+            'mini_batch_size': 10,
             'max_epoch': 200,
 
             # Learning Rate adjustments

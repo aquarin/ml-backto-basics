@@ -806,6 +806,17 @@ class RnnUsingOnlyNumpyTest(unittest.TestCase):
         _compare_numerical_vs_theoretical_derivative(_f, _partial_f_partial_w, w_0)
 
 
+    def test_convert_einsum_to_matmul(self):
+        matrix_a = np.random.normal(0, 1, [9, 10])
+        matrix_b = np.random.normal(0, 1, [6, 7, 10])
+
+        result1 = np.einsum('km,ijm->ijk', matrix_a, matrix_b)
+
+        result2 = np.matmul(matrix_b, matrix_a.T)
+
+        np.testing.assert_almost_equal(result1, result2)
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
