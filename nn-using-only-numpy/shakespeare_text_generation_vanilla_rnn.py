@@ -184,11 +184,11 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
     def test_text_file_training_truncation_45000(self):
         training_parameters = {
-            'thread_worker_count': 10,
+            'thread_worker_count': 2,
             'gradient_clipping_radius': 1,
             'bptt_truncation_length': 10,
             'base_learning_rate': 0.003,
-            'mini_batch_size': 20,
+            'mini_batch_size': 10,
             'max_epoch': 200,
 
             # Learning Rate adjustments
@@ -201,7 +201,7 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
         text_generation_prompt = 'MARCIUS'
         sequence_length = 55
-        hidden_dim = 80
+        hidden_dim = 128
 
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data(
             filepath=text_file, sequence_length=40, truncation=45000, shuffle_data=True, percentage_val_set=.05)
