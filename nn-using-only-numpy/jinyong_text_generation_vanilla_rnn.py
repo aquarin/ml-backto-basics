@@ -45,50 +45,51 @@ sequence_length = 40
 batch_size = 10
 max_epoch=20
 
-def save_model(model):
-    filepath_template = './saved_numpy_models/model_%s.pkl'
-    filepath = filepath_template % datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
-
-    with open(filepath, 'wb') as file:
-        pickle.dump(model, file)
-
 
 def model_training_batch_callback(model, prompt, char_to_id_map, id_to_char_map, output_length=100):
-    generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
-    logger.info("Generated text=%s", generated_text)
-    save_model(model)
+    generated_text = ModelUtils.generate_text_beam_search(model, prompt, char_to_id_map, id_to_char_map, output_length=100)
+    logger.info("Generated text=\n\n%s\n", generated_text)
+    ModelUtils.save_model(model, char_to_id_map, id_to_char_map)
 
-
-def test_simple_training():
-    vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs = ModelUtils.prepare_data_from_text(
-        text=test_text, sequence_length=sequence_length)
-    dim_vocab = len(vocab)
-
-    def _model_batch_callback(model):
-        model_training_batch_callback(model, '洪七公脸如白纸', char_to_id_map, id_to_char_map, output_length=60)
-
-    rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=dim_hidden)
-
-    rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs, learning_rate=learning_rate,
-        batch_size=batch_size, max_epoch=max_epoch, batch_callback=_model_batch_callback)
 
 
 class TestNumpyRnnTextGeneration(unittest.TestCase):
 
     def test_simple_training(self):
-        test_simple_training()
+        training_parameters = {
+            'thread_worker_count': 2,
+            'gradient_clipping_radius': 1,
+            'bptt_truncation_length': 10,
+            'base_learning_rate': 0.05,
+            'min_learning_rate': 0.01,
+            'mini_batch_size': 10,
+            'max_epoch': 200,
 
-    def profile_simple_training(self):
-        # Creating profile object
-        ob = cProfile.Profile()
-        ob.enable()
+            # Learning Rate adjustments
+            'learning_rate_reduction_ratio_when_plataeu': .9,
+            'loss_plataeu_check_window': 20,
+            'min_batches_since_last_lr_adjustment': 40,
+            # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
+            'is_plataeu_criteria_ratio': 1.0
+        }
 
-        cProfile.run('test_simple_training()')
+        text_generation_prompt = '洪七公脸如白纸'
+        sequence_length = 50
+        hidden_dim = 64
 
-        sec = io.StringIO()
-        sortby = SortKey.CUMULATIVE
-        ps = pstats.Stats(ob, stream=sec).sort_stats(sortby)
-        ps.print_stats()
+        vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data_from_text(
+            text=test_text, sequence_length=sequence_length, shuffle_data=False, percentage_val_set=0.1)
+
+        dim_vocab = len(vocab)
+
+        def _model_batch_callback(model):
+            model_training_batch_callback(model, text_generation_prompt, char_to_id_map, id_to_char_map, output_length=100)
+
+        rnn_model = RnnWithNumpy(dim_vocab=dim_vocab, dim_hidden=hidden_dim)
+
+        rnn_model.train(x_input_int_list_of_sequences=input_id_seqs, y_label_int_list_of_sequences=label_id_seqs,
+            training_parameters=training_parameters, batch_callback=_model_batch_callback,
+            validation_x_input_int_list_of_sequences=validation_inputs, validation_y_label_int_list_of_sequences=validation_labels)
 
 
     def test_simple_training_longer(self):
