@@ -106,6 +106,7 @@ class RnnWithNumpy:
             'is_plataeu_criteria_ratio': 1.0,
         }
 
+
     def glorot_normal_init(self, dim_vocab, dim_hidden):
         # Glorot initialization, Gaussian distribution version.
         u_variance = math.sqrt(2.0 / dim_vocab)
@@ -740,12 +741,13 @@ class RnnWithNumpy:
         assert len(input_x_int_sequences) == len(y_label_int_sequences)
 
         dataset_loss = 0
+        start_state_vector = np.zeros(model.dim_hidden)
 
         for sequence_index in range(len(input_x_int_sequences)):
-            start_state_vector = np.zeros(model.dim_hidden)
             computed = RnnWithNumpy.forward_sequence(
                 input_x_int_sequences[sequence_index], model.dim_vocab, model.dim_hidden,
-                model.matrix_u, model.matrix_v, model.matrix_w, start_state_vector, check_shapes=True, print_debug=False)
+                matrix_u=model.matrix_u, matrix_v=model.matrix_v, matrix_w=model.matrix_w, bias_vector=model.bias_vector,
+                start_state_vector=start_state_vector, check_shapes=True, print_debug=False)
             sequence_loss = RnnWithNumpy.sequence_loss_from_forward_computations(
                 model.dim_vocab, computed, y_label_int_sequences[sequence_index], check_shapes=True)
 
