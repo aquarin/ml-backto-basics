@@ -74,11 +74,11 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         }
 
         text_generation_prompt = '洪七公脸如白纸'
-        sequence_length = 50
+        sequence_length = 12
         hidden_dim = 64
 
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data_from_text(
-            text=test_text, sequence_length=sequence_length, shuffle_data=False, percentage_val_set=0.1)
+            text=test_text, sequence_length=sequence_length, shuffle_data=True, percentage_val_set=0.1)
 
         dim_vocab = len(vocab)
 

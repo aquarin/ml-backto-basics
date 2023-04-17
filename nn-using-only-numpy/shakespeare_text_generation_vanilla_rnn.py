@@ -184,15 +184,16 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
 
     def test_text_file_training_truncation_45000(self):
         training_parameters = {
-            'thread_worker_count': 2,
+            'thread_worker_count': 10,
             'gradient_clipping_radius': 1,
             'bptt_truncation_length': 10,
-            'base_learning_rate': 0.003,
+            'base_learning_rate': 0.05,
+            'min_learning_rate': 0.01,
             'mini_batch_size': 10,
             'max_epoch': 200,
 
             # Learning Rate adjustments
-            'learning_rate_reduction_ratio_when_plataeu': .5,
+            'learning_rate_reduction_ratio_when_plataeu': .9,
             'loss_plataeu_check_window': 20,
             'min_batches_since_last_lr_adjustment': 40,
             # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
@@ -200,11 +201,11 @@ class TestNumpyRnnTextGeneration(unittest.TestCase):
         }
 
         text_generation_prompt = 'MARCIUS'
-        sequence_length = 55
-        hidden_dim = 128
+        sequence_length = 100
+        hidden_dim = 80
 
         vocab, char_to_id_map, id_to_char_map, input_id_seqs, label_id_seqs, validation_inputs, validation_labels = ModelUtils.prepare_data(
-            filepath=text_file, sequence_length=40, truncation=45000, shuffle_data=True, percentage_val_set=.05)
+            filepath=text_file, sequence_length=40, truncation=-1, shuffle_data=True, percentage_val_set=.03)
 
         dim_vocab = len(vocab)
 

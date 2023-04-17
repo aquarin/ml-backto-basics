@@ -299,12 +299,12 @@ class ModelUtilsTest(unittest.TestCase):
     def compare_beam_search_and_greedy(self):
         prompt = 'KING'
         output_length=50
-        (model, char_to_id_map, id_to_char_map, desc) = ModelUtils.load_model_and_maps('saved_numpy_models/model_2023_04_15_21_50_46.pkl')
+        (model, char_to_id_map, id_to_char_map, desc) = ModelUtils.load_model_and_maps('saved_numpy_models/model_2023_04_16_19_33_43.pkl')
 
         generated_text = ModelUtils.generate_text_beam_search(model, prompt, char_to_id_map, id_to_char_map, output_length=output_length, print_debug=False)
-        logger.debug("Beam Search Generated text=\n%s", generated_text)
+        logger.debug("============= Beam Search Generated text=\n\n%s\n", generated_text)
         generated_text = ModelUtils.generate_text(model, prompt, char_to_id_map, id_to_char_map, output_length=output_length)
-        logger.debug("Greedy Generated text=\n%s", generated_text)
+        logger.debug("============= Greedy Generated text=\n\n%s\n", generated_text)
 
 
 if __name__ == '__main__':
