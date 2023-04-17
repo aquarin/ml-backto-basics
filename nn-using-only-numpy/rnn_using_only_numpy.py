@@ -65,15 +65,15 @@ def training_worker_method(args):
 
 
 class RnnWithNumpy:
-    def __init__(self, dim_vocab, dim_hidden, init_method='grolot_uniform'):
+    def __init__(self, dim_vocab, dim_hidden, init_method='glorot_uniform'):
         self.dim_vocab = dim_vocab
         self.dim_hidden = dim_hidden
 
         match init_method:
-            case 'grolot_normal':
-                self.grolot_normal_init(dim_vocab, dim_hidden)
-            case 'grolot_uniform':
-                self.grolot_uniform_init(dim_vocab, dim_hidden)
+            case 'glorot_normal':
+                self.glorot_normal_init(dim_vocab, dim_hidden)
+            case 'glorot_uniform':
+                self.glorot_uniform_init(dim_vocab, dim_hidden)
             case _:
                 raise Exception('Cannot recognize init_method=%s' % init_method)
 
@@ -106,7 +106,7 @@ class RnnWithNumpy:
             'is_plataeu_criteria_ratio': 1.0,
         }
 
-    def grolot_normal_init(self, dim_vocab, dim_hidden):
+    def glorot_normal_init(self, dim_vocab, dim_hidden):
         # Glorot initialization, Gaussian distribution version.
         u_variance = math.sqrt(2.0 / dim_vocab)
         # Matrix U is the one that transforms input one-hot vector into its embedding.
@@ -123,7 +123,7 @@ class RnnWithNumpy:
         self.bias_vector = np.random.uniform(-0.1, 0.1, dim_hidden)
 
 
-    def grolot_uniform_init(self, dim_vocab, dim_hidden):
+    def glorot_uniform_init(self, dim_vocab, dim_hidden):
         # Glorot initialization, uniform distribution version.
         u_radius = math.sqrt(6.0 / (dim_vocab ** 2 + dim_hidden ** 2))
         # Matrix U is the one that transforms input one-hot vector into its embedding.
