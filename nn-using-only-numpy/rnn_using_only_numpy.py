@@ -65,24 +65,18 @@ def training_worker_method(args):
 
 
 class RnnWithNumpy:
-    def __init__(self, dim_vocab, dim_hidden):
+    def __init__(self, dim_vocab, dim_hidden, init_method='grolot_uniform'):
         self.dim_vocab = dim_vocab
         self.dim_hidden = dim_hidden
 
-        # Glorot initialization, Gaussian distribution version.
-        u_variance = math.sqrt(2.0 / dim_vocab)
-        # Matrix U is the one that transforms input one-hot vector into its embedding.
-        self.matrix_u = np.random.normal(0.0, u_variance, [dim_hidden, dim_vocab])
+        match init_method:
+            case 'grolot_normal':
+                self.grolot_normal_init(dim_vocab, dim_hidden)
+            case 'grolot_uniform':
+                self.grolot_uniform_init(dim_vocab, dim_hidden)
+            case _:
+                raise Exception('Cannot recognize init_method=%s' % init_method)
 
-        # Transforms post-activation (tanh) state into logits (output embedding)
-        v_variance = math.sqrt(2.0 / dim_hidden)
-        self.matrix_v = np.random.normal(0.0, v_variance, [dim_vocab, dim_hidden])
-
-        # Transforms previous state (s[t-1]) into part of next state, before activation.
-        w_variance = math.sqrt(2.0 / dim_hidden)
-        self.matrix_w = np.random.normal(0.0, w_variance, [dim_hidden, dim_hidden])
-
-        self.bias_vector = np.random.uniform(-0.01, 0.01, dim_hidden)
 
         # No hidden state vector here as member variable. That will be held in each training/prediction's
         # own function call variables.
@@ -111,6 +105,39 @@ class RnnWithNumpy:
             # If loss_moving_avg([-N:]) >= moving_avg([-2N: -N]) * is_plataeu_criteria_ratio, regard this as hitting a plataeu.
             'is_plataeu_criteria_ratio': 1.0,
         }
+
+    def grolot_normal_init(self, dim_vocab, dim_hidden):
+        # Glorot initialization, Gaussian distribution version.
+        u_variance = math.sqrt(2.0 / dim_vocab)
+        # Matrix U is the one that transforms input one-hot vector into its embedding.
+        self.matrix_u = np.random.normal(0.0, u_variance, [dim_hidden, dim_vocab])
+
+        # Transforms post-activation (tanh) state into logits (output embedding)
+        v_variance = math.sqrt(2.0 / dim_hidden)
+        self.matrix_v = np.random.normal(0.0, v_variance, [dim_vocab, dim_hidden])
+
+        # Transforms previous state (s[t-1]) into part of next state, before activation.
+        w_variance = math.sqrt(2.0 / dim_hidden)
+        self.matrix_w = np.random.normal(0.0, w_variance, [dim_hidden, dim_hidden])
+
+        self.bias_vector = np.random.uniform(-0.1, 0.1, dim_hidden)
+
+
+    def grolot_uniform_init(self, dim_vocab, dim_hidden):
+        # Glorot initialization, uniform distribution version.
+        u_radius = math.sqrt(6.0 / (dim_vocab ** 2 + dim_hidden ** 2))
+        # Matrix U is the one that transforms input one-hot vector into its embedding.
+        self.matrix_u = np.random.uniform(-u_radius, u_radius, [dim_hidden, dim_vocab])
+
+        # Transforms post-activation (tanh) state into logits (output embedding)
+        v_radius = math.sqrt(6.0 / (dim_hidden ** 2 + dim_vocab ** 2))
+        self.matrix_v = np.random.uniform(-v_radius, v_radius, [dim_vocab, dim_hidden])
+
+        # Transforms previous state (s[t-1]) into part of next state, before activation.
+        w_radius = math.sqrt(2.0 / (dim_hidden ** 2))
+        self.matrix_w = np.random.uniform(-w_radius, w_radius, [dim_hidden, dim_hidden])
+
+        self.bias_vector = np.random.uniform(-0.1, 0.1, dim_hidden)
 
 
     @staticmethod
